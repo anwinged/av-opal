@@ -129,8 +129,11 @@ class Parameter:
     def __init__(self, paramdescr):
         pass
 
-def DoDataParametrization(data):
-    pass
+def DoDataParametrization(objectdata):
+    data = objectdata['data']
+    for label in data:
+        par = Parameter(data[label])
+        data[label] = par
 
 class ObjectDescription:
     def __init__(self, parentdescr, label, data):
@@ -172,6 +175,12 @@ class ObjectDefinition:
         self.descr = objectdescr
         self.params = {}
 
+    def GetParameter(self, label):
+        pass
+
+    def SetParameter(self, label, value):
+        pass
+
 class ModelDefinition(ObjectDefinition):
     def __init__(self, modeldescr):
         ObjectDefinition(self, modeldescr)
@@ -179,12 +188,13 @@ class ModelDefinition(ObjectDefinition):
 class MethodDefinition(ObjectDefinition):
     def __init__(self, methoddescr):
         ObjectDefinition(self, methoddescr)
+        self.taskjob = None
 
 #-------------------------------------------------------------------------------
 
-class Task:
-    def __init__(self, server):
-        pass
+class Taskjob:
+    def __init__(self, data):
+        self.data = data
 
     def Start(self):
         pass
@@ -201,6 +211,7 @@ class Task:
 #-------------------------------------------------------------------------------
 
 def main():
+    import pprint
     s = LocalServer()
     s.LoadTasksDescriptions()
     ds = s.GetTasksDescriptions()
@@ -209,7 +220,10 @@ def main():
         print m.GetTitle()
         print m.GetLabel()
         print m.GetAuthor()
-        print m.GetId()
+        print pprint.pformat(m.data, indent = 2)
+
+    mds = ms[0]
+    mdf = 0
 
 if __name__ == '__main__':
     main()

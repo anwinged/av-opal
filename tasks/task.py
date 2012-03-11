@@ -2,21 +2,27 @@
 
 import sys
 import json
+import os
 
 def main():
 
-##    if len(sys.argv) != 2:
-##        print 'Error!'
-##        return
-##
-##    if sys.argv[1] == '-i':
-    with open('task.js') as f:
-        d = json.load(f)
-        print json.dumps(d, indent = 2)
+#    try:
 
-##    elif sys.argv[1] == '-r':
-##        data = raw_input()
-##        data = json.loads(data)
+    d = os.path.dirname(__file__)
+    os.chdir(d)
+
+    if sys.argv[1] == '-i':
+        with open('task.js') as f:
+            d = json.load(f)
+            print json.dumps(d, indent = 2)
+
+    elif sys.argv[1] == '-r':
+        textdata = raw_input()
+        data = json.loads(data)
+
+#    except:
+#        print 'Error!'
+#        sys.exit(-1)
 
 if __name__ == '__main__':
     main()

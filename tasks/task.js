@@ -1,14 +1,13 @@
 {
     "title": "Example task",
     "author": "Anton Vakhrushev",
-
-    "silent": false,
     
     "models": {
     
         "simpleexample": {
         
             "title": "Simple example model",
+            "author": "Anton Vakhrushev",
 
             "data": {
             

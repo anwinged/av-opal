@@ -8,6 +8,7 @@
         
             "title": "Simple example model",
             "author": "Anton Vakhrushev",
+            "date": "2012-03-08",
 
             "data": {
             
@@ -26,6 +27,7 @@
             
                 "default": {
                     "title": "Default method",
+                    "author": "Anton Vakhrushev",
                     "data": {
                         "p": {
                             "type":     "int",
@@ -33,22 +35,8 @@
                         }
                     }
                 }
-            },
-            
-            "result": {
-                
-                "data": {
-                    "sum": "int"
-                },
-                
-                "table": {
-                    "head": [
-                        { "x" : "int" },
-                        { "u" : "double" }
-                    ]
-                }
-                
             }
+            
         }
     }
 }

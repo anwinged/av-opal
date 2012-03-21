@@ -12,7 +12,7 @@ def main():
     os.chdir(d)
 
     if sys.argv[1] == '-i':
-        with open('task.js') as f:
+        with open('testt.js') as f:
             d = json.load(f)
             print json.dumps(d, indent = 2)
 

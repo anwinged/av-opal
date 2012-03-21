@@ -10,11 +10,14 @@
             "author": "Anton Vakhrushev",
             "date": "2012-03-08",
 
+            "exec": true,
+
             "params": {
 
                 "x": {
                     "type":     "int",
-                    "default":  10
+                    "default":  10,
+                    "title":    "Main parameter"
                 },
 
                 "u": {
@@ -24,7 +27,9 @@
 
                 "n": {
                     "type":     "int",
-                    "default":  1000
+                    "default":  1000,
+                    "title":    "Steps",
+                    "comment":  "Number of steps for algorithm"
                 }
             }
         }

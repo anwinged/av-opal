@@ -37,20 +37,50 @@ class TaskDescription:
 #-------------------------------------------------------------------------------
 
 class Parameter:
-    def __init__(self, paramdescr):
-        pass
+    def __init__(self, data):
+        self.data = data
 
-def DoDataParametrization(objectdata):
-    data = objectdata['data']
-    for label in data:
-        par = Parameter(data[label])
-        data[label] = par
+    def GetType(self):
+        return self.data['type']
+
+    def GetTitle(self):
+        return self.data.get('title', '')
+
+    def GetComment(self):
+        return self.data.get('comment', '')
+
+    def GetDefault(self):
+        return self.data.get('default')
+
+    def GetTestExpresion(self):
+        return self.data.get('test')
+
+    def Test(self, value):
+        return True
+
+    #def __repr__(self):
+    #    return "'{}'".format(
+    #        self.GetType()
+    #    )
+
+#-------------------------------------------------------------------------------
 
 class DataDescription:
-    def __init__(self, parentdescr, label, data):
-        self.parentdescr = parentdescr
-        self.label       = label
-        self.data        = data
+    def __init__(self, parent, label, data):
+        self.parent = parent
+        self.label  = label
+        self.data   = data
+
+        # создание описаний параметров
+        self.pdata = self.data.get('params', {})
+        for label in self.pdata:
+            par = Parameter(self.pdata[label])
+            self.pdata[label] = par
+
+        self.specs = []
+        # рекурсивное создание описаний спецификаций
+        for label, data in self.data.get('spec', {}).iteritems():
+            self.specs.append(DataDescription(self, label, data))
 
     def GetLabel(self):
         return self.label
@@ -64,24 +94,53 @@ class DataDescription:
     def GetId(self):
         return None
 
+    def GetSpecifications(self):
+        return self.specs
+
+    def IsExecutable(self):
+        return self.data.get('exec', True)
+
+    def __getitem__(self, label):
+        return self.pdata.get(label)
+
 #-------------------------------------------------------------------------------
 
 class DataDefinition:
-    def __init__(self, objectdescr):
-        self.descr = objectdescr
+    def __init__(self, datadescr):
+        self.DD = datadescr
         self.params = {}
+        for param in self.DD.pdata:
+            self.params[param] = self.DD[param].GetDefault()
+
         self.taskjob = None
 
-    def GetParameter(self, label):
-        pass
+    def __getitem__(self, label):
+        return self.params[label]
 
-    def SetParameter(self, label, value):
-        pass
+    def __setitem__(self, label, value):
+        if self.DD[label].Test(value):
+            self.params[label] = value
+        else:
+            raise ValueError
 
 #-------------------------------------------------------------------------------
 
+import server, json
+from pprint import pprint
+
 def main():
-    pass
+    s = server.LocalServer()
+    s.LoadTasksDescriptions()
+    ds = s.GetTasksDescriptions()
+    models = []
+    for d in ds:
+        models.extend(d.GetModelsDescriptions())
+
+    model = models[0]
+
+    mdef = DataDefinition(model)
+    pprint(mdef.DD.data)
+    print mdef.DD['x'].GetTitle()
 
 if __name__ == '__main__':
     main()

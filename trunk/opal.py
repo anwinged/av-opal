@@ -18,9 +18,15 @@ def main():
     import pprint
     s = server.LocalServer()
     s.LoadTasksDescriptions()
-    ds = s.GetTasksDescriptions()[0]
+    ds = s.GetTasksDescriptions()
+    ms = []
+    for d in ds:
+        ms.extend(d.GetModelsDescriptions())
 
-    pprint.pprint(ds.data)
+    m = ms[0]
+    pprint.pprint(m.data)
+
+    print m.GetSpecifications()
 
 if __name__ == '__main__':
     main()

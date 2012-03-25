@@ -29,7 +29,7 @@ class TaskDescription:
         self.data       = data
         self.models     = []
         for label, data in self.data['models'].iteritems():
-            self.models.append(DataDescription(self, label, data))
+            self.models.append(DataDescription(self, label, data, self.server))
 
     def GetModelsDescriptions(self):
         return self.models
@@ -66,10 +66,11 @@ class Parameter:
 #-------------------------------------------------------------------------------
 
 class DataDescription:
-    def __init__(self, parent, label, data):
+    def __init__(self, parent, label, data, taskd):
         self.parent = parent
         self.label  = label
         self.data   = data
+        self.taskd  = taskd
 
         # создание описаний параметров
         self.pdata = self.data.get('params', {})
@@ -80,7 +81,7 @@ class DataDescription:
         self.specs = []
         # рекурсивное создание описаний спецификаций
         for label, data in self.data.get('spec', {}).iteritems():
-            self.specs.append(DataDescription(self, label, data))
+            self.specs.append(DataDescription(self, label, data, self.taskd))
 
     def GetLabel(self):
         return self.label
@@ -106,8 +107,9 @@ class DataDescription:
 #-------------------------------------------------------------------------------
 
 class DataDefinition:
-    def __init__(self, datadescr):
+    def __init__(self, datadescr, parent = None):
         self.DD = datadescr
+        self.parent = parent
         self.params = {}
         for param in self.DD.pdata:
             self.params[param] = self.DD[param].GetDefault()
@@ -122,6 +124,18 @@ class DataDefinition:
             self.params[label] = value
         else:
             raise ValueError
+
+    def PackParams(self):
+
+        owner = self
+        package = []
+        while owner:
+            data = {'label': owner.DD.GetLabel(), 'params': owner.params}
+            package.append(data)
+            owner = owner.parent
+        package.reverse()
+
+        return package
 
 #-------------------------------------------------------------------------------
 
@@ -139,8 +153,11 @@ def main():
     model = models[0]
 
     mdef = DataDefinition(model)
-    pprint(mdef.DD.data)
-    print mdef.DD['x'].GetTitle()
+    #pprint(mdef.DD.data)
+    mdef['x'] = 20
+
+    p = mdef.PackParams()
+    pprint(p)
 
 if __name__ == '__main__':
     main()

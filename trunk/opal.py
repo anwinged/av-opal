@@ -14,6 +14,9 @@
 import server
 import task
 
+class Project:
+    pass
+
 def main():
     import pprint
     s = server.LocalServer()

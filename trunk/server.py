@@ -11,10 +11,13 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 
-import subprocess
+import os
+import sys
 import json
-import os, sys
+import time
 import datetime
+import threading
+import subprocess
 
 import task
 
@@ -29,16 +32,16 @@ class LocalServer:
     """
     """
     def __init__(self):
-        self.max_run = 2
-        self.cur_run = 0
+        self.max_workers = 2
 
         self.task_descrs = []
         self.task_queue = []
         self.log = None
 
-        self.Init()
+        self.lock = threading.Lock()
 
-    def Init(self):
+        # init actions
+
         self.log = open('log.txt', 'w')
         self.WriteToLog('local server initialized')
 
@@ -97,20 +100,57 @@ class LocalServer:
         """
         return self.task_descrs
 
-    def GetTaskCount(self):
+    def GetJobsCount(self):
         pass
 
-    def GetTask(self, index):
+    def GetJob(self, index):
         pass
 
-    def AddTask(self, task):
+    def AddJob(self, taskdescr, data):
         pass
 
 #-------------------------------------------------------------------------------
 
-class Taskjob:
-    def __init__(self, data):
-        self.data = data
+class Worker(threading.Thread):
+    def __init__(self, queue, lock):
+        threading.Thread.__init__(self)
+        self.queue = queue
+        self.lock = lock
+        self.daemon = True
+
+    def FindNext(self):
+        result = None
+        for job in self.queue:
+            if job.GetStatus() == JOB_STOP:
+                result = job
+        return result
+
+    def run(self):
+        while True:
+            job = None
+            with self.lock:
+                job = FindNext()
+            if job:
+                job.Start()
+            else:
+                time.sleep(1)
+
+#-------------------------------------------------------------------------------
+
+JOB_STOP     = 0
+JOB_RUN      = 1
+JOB_PAUSE    = 2
+JOB_COMPLETE = 4
+
+class Job:
+    def __init__(self, taskd, datadump):
+        self.taskd   = taskd
+        self.datad   = datadump
+        self.status  = JOB_STOP
+        self.percent = 0.0
+        self.result  = None
+
+        #self.
 
     def Start(self):
         pass
@@ -121,9 +161,14 @@ class Taskjob:
     def Pause(self):
         pass
 
-    def Status(self):
-        pass
+    def GetStatus(self):
+        return self.status
 
+    def IsComplete(self):
+        return self.GetStatus() == JOB_COMPLETE
+
+    def GetResult(self):
+        return self.result
 
 def main():
     pass

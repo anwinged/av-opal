@@ -21,6 +21,15 @@ import subprocess
 
 import task
 
+globallock = threading.Lock()
+def WriteToLog(msg):
+    with globallock:
+        tm = str(datetime.datetime.now())
+        msg = tm + '  ' + str(msg)
+        #self.log.write(msg + '\n')
+        print msg
+
+
 def GenerateId(data):
     import hashlib
     title  = data['title']
@@ -35,15 +44,18 @@ class LocalServer:
         self.max_workers = 2
 
         self.task_descrs = []
-        self.task_queue = []
+        self.jobs_queue = []
         self.log = None
 
-        self.lock = threading.Lock()
+        self.queue_lock = threading.Lock()
 
         # init actions
 
         self.log = open('log.txt', 'w')
         self.WriteToLog('local server initialized')
+
+        worker = Worker(self.jobs_queue, self.queue_lock)
+        worker.start()
 
     def Close(self):
         self.WriteToLog('local server closed\n')
@@ -76,8 +88,10 @@ class LocalServer:
             try:
                 # нормализуем указанный путь
                 line = os.path.normpath(line)
+                line = os.path.abspath(line)
                 # считываем данные через shell (важно для скриптовых языков)
-                textdata = subprocess.check_output([line, '-i'], shell = True)
+                textdata = subprocess.check_output([line, '-i'], shell = True,
+                    cwd = os.path.dirname(line))
                 # загружаем данные описания задачи
                 data = json.loads(textdata)
                 # провряем их на корректность
@@ -106,8 +120,11 @@ class LocalServer:
     def GetJob(self, index):
         pass
 
-    def AddJob(self, taskdescr, data):
-        pass
+    def AddJob(self, taskd, datadump):
+        job = Job(taskd, datadump)
+        with self.queue_lock:
+            self.jobs_queue.append(job)
+        WriteToLog('Job added')
 
 #-------------------------------------------------------------------------------
 
@@ -117,19 +134,22 @@ class Worker(threading.Thread):
         self.queue = queue
         self.lock = lock
         self.daemon = True
+        WriteToLog('worker started')
 
     def FindNext(self):
         result = None
         for job in self.queue:
-            if job.GetStatus() == JOB_STOP:
+            if job.GetState() == JOB_READY:
                 result = job
         return result
 
     def run(self):
         while True:
             job = None
+            # найти следующее готовое к выполнению задание
             with self.lock:
-                job = FindNext()
+                job = self.FindNext()
+            # и, если нашли, приступаем к выполнению
             if job:
                 job.Start()
             else:
@@ -137,32 +157,57 @@ class Worker(threading.Thread):
 
 #-------------------------------------------------------------------------------
 
-JOB_STOP     = 0
-JOB_RUN      = 1
-JOB_PAUSE    = 2
-JOB_COMPLETE = 4
+JOB_READY     = 0
+JOB_RUNNING   = 1
+JOB_STOPPED   = 2
+JOB_COMPLETED = 3
 
 class Job:
     def __init__(self, taskd, datadump):
         self.taskd   = taskd
         self.datad   = datadump
-        self.status  = JOB_STOP
+        self.state   = JOB_READY
         self.percent = 0.0
         self.result  = None
+        self.proc    = None
 
-        #self.
+    def ProcessMsg(self, msg):
+        WriteToLog(msg.strip())
 
     def Start(self):
-        pass
+        #try:
+            self.state = JOB_RUNNING
+            WriteToLog('Job started')
+            execpath = self.taskd.execpath
+            # запускаем процесс на выполнение
+            self.proc = subprocess.Popen([execpath, '-r'], shell = True,
+                stdin = subprocess.PIPE, stdout = subprocess.PIPE,
+                stderr = subprocess.STDOUT, cwd = os.path.dirname(execpath))
+            # передаем стартовые параметры
+            istream = self.proc.stdin
+            ostream = self.proc.stdout
+            istream.write(self.datad + '\n')
+            istream.flush()
+            # пока процесс не завершится (или его не прибьют)
+            while self.proc.poll() == None:
+                try:
+                    msg  = ostream.readline()
+                    self.ProcessMsg(msg)
+                except Exception, e:
+                    WriteToLog('Income msg failed' + str(e))
+            self.state = JOB_COMPLETED
+            WriteToLog('Job done')
+        #except:
+            #WriteToLog('Job loop failed')
+            #self.state = JOB_STOPPED
 
     def Stop(self):
-        pass
+        if self.proc and self.proc.poll() != None:
+            self.proc.kill()
+            WriteToLog('Job killed')
 
-    def Pause(self):
-        pass
-
-    def GetStatus(self):
-        return self.status
+    def GetState(self):
+        return self.state
 
     def IsComplete(self):
         return self.GetStatus() == JOB_COMPLETE

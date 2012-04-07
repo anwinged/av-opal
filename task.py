@@ -29,7 +29,7 @@ class TaskDescription:
         self.data       = data
         self.models     = []
         for label, data in self.data['models'].iteritems():
-            self.models.append(DataDescription(self, label, data, self.server))
+            self.models.append(DataDescription(None, label, data, self))
 
     def GetModelsDescriptions(self):
         return self.models
@@ -126,20 +126,23 @@ class DataDefinition:
             raise ValueError
 
     def PackParams(self):
-
-        owner = self
         package = []
+        owner = self
         while owner:
             data = {'label': owner.DD.GetLabel(), 'params': owner.params}
             package.append(data)
             owner = owner.parent
         package.reverse()
+        return json.dumps(package)
 
-        return package
+    def Flush(self):
+        server = self.DD.taskd.server
+        datadump = self.PackParams()
+        server.AddJob(self.DD.taskd, datadump)
 
 #-------------------------------------------------------------------------------
 
-import server, json
+import server, json, time
 from pprint import pprint
 
 def main():
@@ -153,11 +156,15 @@ def main():
     model = models[0]
 
     mdef = DataDefinition(model)
-    #pprint(mdef.DD.data)
+    pprint(mdef.DD.data)
     mdef['x'] = 20
 
     p = mdef.PackParams()
     pprint(p)
 
+    mdef.Flush()
+    mdef.Flush()
+
+    time.sleep(15)
 if __name__ == '__main__':
     main()

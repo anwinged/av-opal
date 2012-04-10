@@ -1,33 +1,91 @@
 ﻿#! coding: utf-8
 
+# Тестовое приложение для проекта Opal
+# Вычисление значений синуса по формулам Тейлора
+# Вычисляет значения для указанного диапазона с заданной точностью
+#   и нужным количеством шагов
+
 import sys
 import json
-import os
-import time
 
 def write(msg):
-    sys.stdout.write(msg + '\n')
+    sys.stdout.write(str(msg) + '\n')
     sys.stdout.flush()
+
+def sin_taylor(x, n):
+    f  = 1
+    s  = 0.0
+    e  = 1.0
+    x0 = x
+    for i in xrange(n + 1):
+        #print e, f, x
+        f *= (2 * i) * (2 * i + 1) if i else 1
+        s += e * x / f
+        x *= x0 * x0
+        e *= -1
+    return s
+
+def answer(p):
+    return json.dumps({
+        "answer": "ok",
+        "value": p
+    })
+
+def error(msg):
+    return json.dumps({
+        "answer": "error",
+        "comment": msg
+    })
+
+def result(r):
+    return json.dumps({
+        "answer": "result",
+        "result": {
+            "table": {
+                "head": [{"x": "double"}, {"y": "double"}],
+                "body": r
+            }
+        }
+    })
 
 def main():
 
-#    try:
+    try:
 
-    if sys.argv[1] == '-i':
-        with open('testt.json') as f:
-            d = json.load(f)
-            write(json.dumps(d, indent = 2))
+        if sys.argv[1] == '-i':
 
-    elif sys.argv[1] == '-r':
-        textdata = raw_input()
-        #data = json.loads(data)
-        for i in xrange(10):
-            time.sleep(0.5)
-            write(json.dumps({ "hello": "world" }))
+            with open('testt.json') as f:
+                d = json.load(f)
+                write(json.dumps(d, indent = 2))
 
-#    except:
-#        print 'Error!'
-#        sys.exit(-1)
+        elif sys.argv[1] == '-r':
+
+            textdata = raw_input()
+            data = json.loads(textdata)
+
+            if not len(data) and data[0]['label'] != 'sintaylor':
+                write(error('Unknown model'))
+                sys.exit(1)
+
+            params = data[0]['params']
+            l = 0                   # левая граница
+            r = params['r']         # правая граница
+            n = params['n']         # количество шагов
+            d = params['d']         # количество членов в разложении Тейлора
+            h = float(r - l) / n    # шаг сетки по х
+            res = []                # таблица резултатов
+
+            while l <= r:
+                y = sin_taylor(l, d)
+                res.append([l, y])
+                write(answer(round(l / r, 2)))
+                l += h
+
+            write(result(res))
+
+    except:
+        write(error('Fatal error'))
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

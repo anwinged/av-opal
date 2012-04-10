@@ -11,6 +11,8 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 
+import copy
+
 class TaskDescription:
     """
     Description of the task. Task runs on server.
@@ -113,8 +115,7 @@ class DataDefinition:
         self.params = {}
         for param in self.DD.pdata:
             self.params[param] = self.DD[param].GetDefault()
-
-        self.taskjob = None
+        self.job = None
 
     def __getitem__(self, label):
         return self.params[label]
@@ -124,6 +125,12 @@ class DataDefinition:
             self.params[label] = value
         else:
             raise ValueError
+
+    def Copy(self):
+        res = copy.copy(self)
+        res.params = copy.copy(self.params)
+        res.job = None
+        return res
 
     def PackParams(self):
         package = []
@@ -138,7 +145,7 @@ class DataDefinition:
     def Flush(self):
         server = self.DD.taskd.server
         datadump = self.PackParams()
-        server.AddJob(self.DD.taskd, datadump)
+        self.job = server.AddJob(self.DD.taskd, datadump)
 
 #-------------------------------------------------------------------------------
 
@@ -157,14 +164,24 @@ def main():
 
     mdef = DataDefinition(model)
     pprint(mdef.DD.data)
-    mdef['x'] = 20
-
+    mdef['r'] = 3.14
+    mdef['n'] = 5
+    mdef['d'] = 0
+    mdef2 = mdef.Copy()
+    mdef2['d'] = 30
     p = mdef.PackParams()
+    pprint(p)
+    p = mdef2.PackParams()
     pprint(p)
 
     mdef.Flush()
-    mdef.Flush()
+    mdef2.Flush()
 
-    time.sleep(15)
+    time.sleep(3)
+
+    print 'RESULT'
+    pprint(mdef.job.result)
+    pprint(mdef2.job.result)
+
 if __name__ == '__main__':
     main()

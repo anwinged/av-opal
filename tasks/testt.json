@@ -4,7 +4,7 @@
 
     "models": {
 
-        "simpleexample": {
+        "sintaylor": {
 
             "title": "Simple model for example",
             "author": "Anton Vakhrushev",
@@ -14,20 +14,21 @@
 
             "params": {
 
-                "x": {
-                    "type":     "int",
-                    "default":  10,
-                    "title":    "Main parameter"
+                "r": {
+                    "type":     "double",
+                    "default":  6.28,
+                    "comment":  "Right edge"
                 },
 
-                "u": {
-                    "type":     "double",
-                    "default":  3.14
+                "d": {
+                    "type":     "int",
+                    "default":  5,
+                    "comment":  "Number of members in taylor serie"
                 },
 
                 "n": {
                     "type":     "int",
-                    "default":  1000,
+                    "default":  10,
                     "title":    "Steps",
                     "comment":  "Number of steps for algorithm"
                 }

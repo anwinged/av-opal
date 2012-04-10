@@ -54,8 +54,9 @@ class LocalServer:
         self.log = open('log.txt', 'w')
         self.WriteToLog('local server initialized')
 
-        worker = Worker(self.jobs_queue, self.queue_lock)
-        worker.start()
+        for i in xrange(2):
+            worker = Worker(self.jobs_queue, self.queue_lock)
+            worker.start()
 
     def Close(self):
         self.WriteToLog('local server closed\n')
@@ -125,42 +126,50 @@ class LocalServer:
         with self.queue_lock:
             self.jobs_queue.append(job)
         WriteToLog('Job added')
+        return job
 
 #-------------------------------------------------------------------------------
 
 class Worker(threading.Thread):
+    number = 0
+
     def __init__(self, queue, lock):
         threading.Thread.__init__(self)
         self.queue = queue
         self.lock = lock
         self.daemon = True
         WriteToLog('worker started')
+        self.id = Worker.number
+        Worker.number += 1
 
-    def FindNext(self):
-        result = None
-        for job in self.queue:
-            if job.GetState() == JOB_READY:
-                result = job
-        return result
+    def Cycle(self):
+        job = None
+        # найти следующее готовое к выполнению задание
+        with self.lock:
+            for j in self.queue:
+                if not j.IsBusy():
+                    job = j
+                    job.SetBusy()
+                    break
+        # и, если нашли, приступаем к выполнению
+        if job:
+            WriteToLog("{} started!".format(self.id))
+            job.Start()
+            WriteToLog("{} finished!".format(self.id))
+        else:
+            time.sleep(1)
 
     def run(self):
         while True:
-            job = None
-            # найти следующее готовое к выполнению задание
-            with self.lock:
-                job = self.FindNext()
-            # и, если нашли, приступаем к выполнению
-            if job:
-                job.Start()
-            else:
-                time.sleep(1)
+            self.Cycle()
 
 #-------------------------------------------------------------------------------
 
 JOB_READY     = 0
-JOB_RUNNING   = 1
-JOB_STOPPED   = 2
-JOB_COMPLETED = 3
+JOB_BUSY      = 1
+JOB_RUNNING   = 2
+JOB_STOPPED   = 3
+JOB_COMPLETED = 4
 
 class Job:
     def __init__(self, taskd, datadump):
@@ -168,16 +177,36 @@ class Job:
         self.datad   = datadump
         self.state   = JOB_READY
         self.percent = 0.0
+        self.comment = ''
         self.result  = None
         self.proc    = None
 
     def ProcessMsg(self, msg):
-        WriteToLog(msg.strip())
+        # разбираем полученный ответ
+        data = json.loads(msg)
+        # извлекаем оттуда ответ
+        ans = data['answer']
+        # ответ получен ок или предупреждение
+        # записываем значение прогресса, если имеется
+        if ans == 'ok' or ans == 'warning':
+            self.percent = data.get('value', 0.0)
+        # в ответе пришел результат вычислений
+        # помещаем в секцию результата
+        elif ans == 'result':
+            self.result = data['result']
+        # произошла ошибка
+        elif ans == 'error':
+            WriteToLog('Error!')
+        # недокументированный ответ приложения
+        else:
+            pass
+        # возможно, комментарий прольет свет на проблему
+        self.comment = data.get('comment', '')
+
 
     def Start(self):
-        #try:
+        try:
             self.state = JOB_RUNNING
-            WriteToLog('Job started')
             execpath = self.taskd.execpath
             # запускаем процесс на выполнение
             self.proc = subprocess.Popen([execpath, '-r'], shell = True,
@@ -192,14 +221,27 @@ class Job:
             while self.proc.poll() == None:
                 try:
                     msg  = ostream.readline()
+                    #msg = msg.strip()
                     self.ProcessMsg(msg)
                 except Exception, e:
-                    WriteToLog('Income msg failed' + str(e))
+                    #WriteToLog('Income msg failed: ' + str(e))
+                    pass
             self.state = JOB_COMPLETED
-            WriteToLog('Job done')
-        #except:
-            #WriteToLog('Job loop failed')
-            #self.state = JOB_STOPPED
+        except Exception, e:
+            WriteToLog('Job loop failed: ' + str(e))
+            self.state = JOB_STOPPED
+
+    def SetBusy(self):
+        self.state = JOB_BUSY
+
+    def IsBusy(self):
+        return self.state != JOB_READY
+
+    def IsRunning(self):
+        return self.state == JOB_BUSY or self.state == JOB_RUNNING
+
+    def IsFinished(self):
+        return self.state == JOB_COMPLETED or self.state == JOB_STOPPED
 
     def Stop(self):
         if self.proc and self.proc.poll() != None:

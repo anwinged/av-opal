@@ -17,12 +17,14 @@
                 "r": {
                     "type":     "double",
                     "default":  6.28,
+                    "title":    "Right edge",
                     "comment":  "Right edge"
                 },
 
                 "d": {
                     "type":     "int",
                     "default":  5,
+                    "title":    "Serie deep",
                     "comment":  "Number of members in taylor serie"
                 },
 

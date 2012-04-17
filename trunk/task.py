@@ -174,13 +174,17 @@ def main():
     p = mdef2.PackParams()
     pprint(p)
 
-    mdef.Flush()
+    #mdef.Flush()
     mdef2.Flush()
 
-    time.sleep(3)
+    time.sleep(1)
+    mdef2.job.Stop()
+
+    time.sleep(5)
+    print mdef2.job.GetState()
 
     print 'RESULT'
-    pprint(mdef.job.result)
+    #pprint(mdef.job.result)
     pprint(mdef2.job.result)
 
 if __name__ == '__main__':

@@ -196,7 +196,7 @@ class Job:
             self.result = data['result']
         # произошла ошибка
         elif ans == 'error':
-            WriteToLog('Error!')
+            WriteToLog('Error! ' + msg)
         # недокументированный ответ приложения
         else:
             pass
@@ -243,16 +243,17 @@ class Job:
     def IsFinished(self):
         return self.state == JOB_COMPLETED or self.state == JOB_STOPPED
 
+    def IsComplete(self):
+        return self.GetStatus() == JOB_COMPLETE
+
     def Stop(self):
-        if self.proc and self.proc.poll() != None:
+        WriteToLog('Try to kill')
+        if self.proc and self.proc.poll() == None:
             self.proc.kill()
             WriteToLog('Job killed')
 
     def GetState(self):
         return self.state
-
-    def IsComplete(self):
-        return self.GetStatus() == JOB_COMPLETE
 
     def GetResult(self):
         return self.result

@@ -7,6 +7,7 @@
 
 import sys
 import json
+import time
 
 def write(msg):
     sys.stdout.write(str(msg) + '\n')
@@ -80,11 +81,12 @@ def main():
                 res.append([l, y])
                 write(answer(round(l / r, 2)))
                 l += h
+                time.sleep(0.5)
 
             write(result(res))
 
-    except:
-        write(error('Fatal error'))
+    except Exception, e:
+        write(error('Fatal error: ' + str(e)))
         sys.exit(1)
 
 if __name__ == '__main__':

@@ -18,6 +18,7 @@ import time
 import datetime
 import threading
 import subprocess
+import logging
 
 import task
 
@@ -42,11 +43,10 @@ class LocalServer:
     """
     def __init__(self):
         self.max_workers = 2
-
         self.task_descrs = []
         self.jobs_queue = []
         self.log = None
-
+        self.running = False
         self.queue_lock = threading.Lock()
 
         # init actions
@@ -54,11 +54,8 @@ class LocalServer:
         self.log = open('log.txt', 'w')
         self.WriteToLog('local server initialized')
 
-        for i in xrange(2):
-            worker = Worker(self.jobs_queue, self.queue_lock)
-            worker.start()
-
     def Close(self):
+        self.Stop()
         self.WriteToLog('local server closed\n')
 
     def __del__(self):
@@ -71,10 +68,13 @@ class LocalServer:
         print msg
 
     def Start(self):
-        pass
+        self.running = True
+        for i in xrange(self.max_workers):
+            worker = Worker(self.jobs_queue, self.queue_lock, self.running)
+            worker.start()
 
     def Stop(self):
-        pass
+        self.running = False
 
     def TestTaskData(self, data):
         pass
@@ -133,10 +133,11 @@ class LocalServer:
 class Worker(threading.Thread):
     number = 0
 
-    def __init__(self, queue, lock):
+    def __init__(self, queue, lock, runflag):
         threading.Thread.__init__(self)
         self.queue = queue
         self.lock = lock
+        self.runflag = runflag
         self.daemon = True
         WriteToLog('worker started')
         self.id = Worker.number
@@ -154,13 +155,15 @@ class Worker(threading.Thread):
         # и, если нашли, приступаем к выполнению
         if job:
             WriteToLog("{} started!".format(self.id))
-            job.Start()
+            job.Start(self.runflag)
             WriteToLog("{} finished!".format(self.id))
         else:
             time.sleep(1)
 
     def run(self):
         while True:
+            if not self.runflag:
+                return
             self.Cycle()
 
 #-------------------------------------------------------------------------------
@@ -170,6 +173,7 @@ JOB_BUSY      = 1
 JOB_RUNNING   = 2
 JOB_STOPPED   = 3
 JOB_COMPLETED = 4
+JOB_DROPPED   = 5
 
 class Job:
     def __init__(self, taskd, datadump):
@@ -204,7 +208,7 @@ class Job:
         self.comment = data.get('comment', '')
 
 
-    def Start(self):
+    def Start(self, runflag):
         try:
             self.state = JOB_RUNNING
             execpath = self.taskd.execpath
@@ -223,6 +227,10 @@ class Job:
                     msg  = ostream.readline()
                     #msg = msg.strip()
                     self.ProcessMsg(msg)
+
+                    if not runflag:
+                        self.Stop()
+                # todo вписать исключения, которые относятся к JSON & dict
                 except Exception, e:
                     #WriteToLog('Income msg failed: ' + str(e))
                     pass

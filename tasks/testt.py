@@ -81,7 +81,7 @@ def main():
                 res.append([l, y])
                 write(answer(round(l / r, 2)))
                 l += h
-                time.sleep(0.5)
+                time.sleep(0.2)
 
             write(result(res))
 

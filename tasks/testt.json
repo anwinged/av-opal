@@ -15,7 +15,7 @@
             "params": {
 
                 "r": {
-                    "type":     "double",
+                    "type":     "float",
                     "default":  6.28,
                     "title":    "Right edge",
                     "comment":  "Right edge"

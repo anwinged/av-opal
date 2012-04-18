@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import wx
+import wx.gizmos
 import wx.propgrid as wxpg
 
 ID_TEST             = wx.NewId()
@@ -25,9 +26,12 @@ class MainFrame (wx.Frame):
 
         bSizer4 = wx.BoxSizer(wx.VERTICAL)
 
-        self.m_user_models = wx.TreeCtrl(self,
+        self.m_user_models = wx.gizmos.TreeListCtrl(self,
             style = wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT | wx.TR_EDIT_LABELS)
         self.m_user_models.SetMinSize(wx.Size(-1,200))
+        self.m_user_models.AddColumn("Model name")
+        self.m_user_models.AddColumn("Status")
+        self.m_user_models.AddColumn("Progress")
 
         bSizer4.Add(self.m_user_models, 0, wx.ALL|wx.EXPAND, 1)
 
@@ -38,8 +42,8 @@ class MainFrame (wx.Frame):
 
         bSizer3.Add(bSizer4, 1, wx.EXPAND, 5)
 
-        self.m_job_list = wx.ListCtrl(self, style = wx.LC_LIST)
-        self.m_job_list.SetMinSize(wx.Size(150,-1))
+        self.m_job_list = wx.ListBox(self)#, style = wx.LC_LIST)
+        self.m_job_list.SetMinSize(wx.Size(200,-1))
 
         bSizer3.Add(self.m_job_list, 0, wx.ALL|wx.EXPAND, 1)
 

@@ -16,6 +16,10 @@ import task
 import wx
 import wx.propgrid as wxpg
 import forms
+import time
+import datetime
+import os
+import threading
 
 #-----------------------------------------------------------------------------
 # Главная форма
@@ -25,26 +29,70 @@ class MainFrame(forms.MainFrame):
     def __init__(self):
         forms.MainFrame.__init__(self, None)
 
-        s = server.LocalServer()
-        s.LoadTasksDescriptions()
+        self.server = s = server.LocalServer()
+        self.server.LoadTasksDescriptions()
         ds = s.GetTasksDescriptions()
         models = []
         for d in ds:
             models.extend(d.GetModelsDescriptions())
-
         model = models[0]
+        s.Start()
 
-        self.m_user_models.Bind(wx.EVT_TREE_ITEM_ACTIVATED,
+        self.m_user_models.Bind(wx.EVT_TREE_SEL_CHANGED,
             self.OnModelActivated)
         self.m_params.Bind(wxpg.EVT_PG_CHANGING,
             self.OnParamChanging)
+        self.m_params.Bind(wxpg.EVT_PG_CHANGED,
+            self.OnParamChanged)
 
         self.Bind(wx.EVT_MENU, self.OnTest, id = forms.ID_TEST)
         self.Bind(wx.EVT_MENU, self.OnDuplicate, id = forms.ID_DUPLICATE)
 
+        self.Bind(wx.EVT_CLOSE, self.OnClose)
+        self.Bind(wx.EVT_IDLE, self.OnIdle)
+
         self.m_params.AddPage('fp')
 
+        ov = threading.Thread(target = self.Overseer)
+        ov.daemon = 1
+        ov.start()
+
         self.NewProject(model)
+
+
+    def OnClose(self, event):
+        self.server.Stop()
+        self.Destroy()
+
+    # todo1 вменяемый цикл обхода!
+    def Overseer(self):
+
+        def SeeTheItem(item):
+            um = self.m_user_models
+            md = um.GetPyData(item)
+            print um.GetItemText(item)
+            job = md.job
+            if job:
+                t = os.path.basename(job.taskd.execpath)
+                p = job.percent * 100
+                print t, p
+                um.SetItemText(item, '{}: {:.2F}%'.format(t, p), 1)
+
+            child, cookie = um.GetFirstChild()
+            while child.IsOk():
+                SeeTheItem(child)
+                child, cookie = um.GetNextChild(child, cookie)
+
+        #try:
+            server = self.server
+            while True:
+                print 'cycle'
+                um = self.m_user_models
+                item = um.GetFirstVisibleItem()
+                SeeTheItem(item)
+                time.sleep(0.5)
+        #except:
+        #    pass
 
     def NewProject(self, project):
         # 1. загрузить спецификации модели
@@ -54,10 +102,33 @@ class MainFrame(forms.MainFrame):
         root    = um.AddRoot('')
         data    = task.DataDefinition(model)
 
-        child   = um.AppendItem(root, u'Обычная')
+        child   = um.AppendItem(root, 'Default')
         um.SetPyData(child, data)
+        um.SetItemText(child, '234', 1)
 
     def SelectUserModel(self, model_def):
+
+        def SelectProperty(param_type):
+            """
+            По указанному имени типа возвращает "свойство" для списка "свойств"
+
+            Смотри руководство пользователя для того, чтобы получить полную
+            информацию о всех типах данных, используемых в Opal.
+            """
+            if param_type == 'bool':
+                return wxpg.BoolProperty
+            elif param_type == 'int':
+                return wxpg.IntProperty
+            elif param_type == 'float' or param_type == 'double':
+                return wxpg.FloatProperty
+            elif param_type == 'string':
+                return wxpg.StringProperty
+            elif param_type == 'list':
+                return wxpg.ArrayStringProperty
+            else:
+                # очень плохо, если это произошло
+                raise KeyError()
+
         msg = model_def.PackParams()
         pg = self.m_params
         pg.ClearPage(0)
@@ -65,26 +136,43 @@ class MainFrame(forms.MainFrame):
         for k, v in model_def.params.iteritems():
             p = model_def.DD[k]
             title = p.GetTitle() or k
-            pid = pg.Append(wxpg.StringProperty(title, value=str(v)))
+            prop = SelectProperty(p.GetType())
+            pid = pg.Append(prop(title, value = v))
             pg.SetPropertyClientData(pid, k)
             pg.SetPropertyHelpString(pid, p.GetComment())
+
+        pd = model_def.PackParams()
+        self.SetStatusText(pd, 0)
 
     def OnModelActivated(self, event):
         item = event.GetItem()
         data = self.m_user_models.GetPyData(item)
-        self.SelectUserModel(data)
+        if data:
+            self.SelectUserModel(data)
 
     def OnParamChanging(self, event):
-        value = event.GetValue()
-        print repr(value)
+        #value = event.GetValue()
+        #print repr(value)
         #wx.MessageBox(value, 'changing')
         #event.Veto()
+        pass
+
+    def OnParamChanged(self, event):
+        prop = event.GetProperty()
+        if not prop:
+            return
+        value = prop.GetValue()
+        param = prop.GetClientData()
+        um = self.m_user_models
+        id = um.GetSelection()
+        md = um.GetItemPyData(id)
+        md[param] = value
 
     def OnTest(self, event):
         um = self.m_user_models
         id = um.GetSelection()
         md = um.GetItemPyData(id)
-        wx.MessageBox(md.PackParams())
+        #wx.MessageBox(md.PackParams())
         md.Flush()
         #wx.MessageBox('test')
 
@@ -97,7 +185,18 @@ class MainFrame(forms.MainFrame):
         child = um.AppendItem(parent, title + ' Copy')
         um.SetPyData(child, md.Copy())
 
-
+    def OnIdle(self, event):
+##        server = self.server
+##        self.m_job_list.Freeze()
+##        self.m_job_list.Clear()
+##        with server.queue_lock:
+##            for j in server.jobs_queue:
+##                t = os.path.dirname(j.taskd.execpath)
+##                p = j.percent * 100.0
+##                self.m_job_list.Append('{}: {:.2}%'.format(t, p))
+##        self.m_job_list.Thaw()
+        pass
+        #time.sleep(1)
 
 #-----------------------------------------------------------------------------
 # Приложение

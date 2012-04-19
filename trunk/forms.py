@@ -10,6 +10,10 @@ ID_DUPLICATE_MODEL  = wx.NewId()
 ID_DELETE_MODEL     = wx.NewId()
 ID_PROCESS_MODEL    = wx.NewId()
 
+class MyTreeListCtrl(wx.gizmos.TreeListCtrl):
+    def Refresh(self, erase, rect):
+        wx.gizmos.TreeListCtrl.Refresh(False, rect)
+
 class MainFrame (wx.Frame):
 
     def __init__(self, parent):
@@ -27,8 +31,10 @@ class MainFrame (wx.Frame):
         bSizer4 = wx.BoxSizer(wx.VERTICAL)
 
         self.m_user_models = wx.gizmos.TreeListCtrl(self,
-            style = wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT | wx.TR_EDIT_LABELS)
-        self.m_user_models.SetMinSize(wx.Size(-1,200))
+        #self.m_user_models = MyTreeListCtrl(self,
+        #self.m_user_models = wx.TreeCtrl(self,
+            style = wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT | wx.TR_EDIT_LABELS | wx.TR_ROW_LINES)
+        self.m_user_models.SetMinSize(wx.Size(-1, 200))
         self.m_user_models.AddColumn("Model name")
         self.m_user_models.AddColumn("Status")
         self.m_user_models.AddColumn("Progress")

@@ -184,6 +184,7 @@ class Job:
         self.comment = ''
         self.result  = None
         self.proc    = None
+        self.client_data = None
 
     def ProcessMsg(self, msg):
         # разбираем полученный ответ

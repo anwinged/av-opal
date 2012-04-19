@@ -64,47 +64,41 @@ class MainFrame(forms.MainFrame):
         self.server.Stop()
         self.Destroy()
 
-    # todo1 вменяемый цикл обхода!
     def Overseer(self):
-
-        def SeeTheItem(item):
-            um = self.m_user_models
-            md = um.GetPyData(item)
-            print um.GetItemText(item)
-            job = md.job
-            if job:
-                t = os.path.basename(job.taskd.execpath)
-                p = job.percent * 100
-                print t, p
-                um.SetItemText(item, '{}: {:.2F}%'.format(t, p), 1)
-
-            child, cookie = um.GetFirstChild()
-            while child.IsOk():
-                SeeTheItem(child)
-                child, cookie = um.GetNextChild(child, cookie)
-
-        #try:
-            server = self.server
+        try:
             while True:
-                print 'cycle'
-                um = self.m_user_models
-                item = um.GetFirstVisibleItem()
-                SeeTheItem(item)
+                if True:
+                    wx.MutexGuiEnter()
+                    #print '-- cycle --'
+                    um = self.m_user_models
+                    #um.Freeze()
+                    item = um.GetRootItem()
+                    while item.IsOk():
+                        md = um.GetPyData(item)
+                        job = md.job if md else None
+                        if job and job.IsRunning():
+                            t = os.path.basename(job.taskd.execpath)
+                            p = job.percent * 100
+                            #print t, p
+                            um.SetItemText(item, str(job.GetState()), 1)
+                            um.SetItemText(item, '{}: {:.2F}%'.format(t, p), 2)
+                        item = um.GetNext(item)
+                    #um.Thaw()
+                    wx.MutexGuiLeave()
                 time.sleep(0.5)
-        #except:
-        #    pass
+        except Exception, e:
+            print 'Error in overseer: ', e
 
     def NewProject(self, project):
         # 1. загрузить спецификации модели
         # 2. создать одну модель по умолчанию
         model   = project
         um      = self.m_user_models
-        root    = um.AddRoot('')
+        root    = um.AddRoot('Root')
         data    = task.DataDefinition(model)
 
         child   = um.AppendItem(root, 'Default')
         um.SetPyData(child, data)
-        um.SetItemText(child, '234', 1)
 
     def SelectUserModel(self, model_def):
 
@@ -169,6 +163,7 @@ class MainFrame(forms.MainFrame):
         md[param] = value
 
     def OnTest(self, event):
+
         um = self.m_user_models
         id = um.GetSelection()
         md = um.GetItemPyData(id)
@@ -184,19 +179,10 @@ class MainFrame(forms.MainFrame):
         md = um.GetItemPyData(id)
         child = um.AppendItem(parent, title + ' Copy')
         um.SetPyData(child, md.Copy())
+        self.SetStatusText('Copy for "{}" created'.format(title), 0)
 
     def OnIdle(self, event):
-##        server = self.server
-##        self.m_job_list.Freeze()
-##        self.m_job_list.Clear()
-##        with server.queue_lock:
-##            for j in server.jobs_queue:
-##                t = os.path.dirname(j.taskd.execpath)
-##                p = j.percent * 100.0
-##                self.m_job_list.Append('{}: {:.2}%'.format(t, p))
-##        self.m_job_list.Thaw()
         pass
-        #time.sleep(1)
 
 #-----------------------------------------------------------------------------
 # Приложение

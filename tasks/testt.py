@@ -79,7 +79,7 @@ def main():
             while l <= r:
                 y = sin_taylor(l, d)
                 res.append([l, y])
-                write(answer(round(l / r, 2)))
+                write(answer(l / r))
                 l += h
                 time.sleep(0.2)
 

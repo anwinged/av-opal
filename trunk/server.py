@@ -31,23 +31,19 @@ def WriteToLog(msg):
         print msg
 
 
-def GenerateId(data):
-    import hashlib
-    title  = data['title']
-    author = data['author']
-    id = hashlib.md5(title + author).hexdigest()
-    return id
-
 class LocalServer:
-    """
-    """
-    def __init__(self):
-        self.max_workers = 2
-        self.task_descrs = []
-        self.jobs_queue = []
-        self.log = None
-        self.running = False
-        self.queue_lock = threading.Lock()
+    def __init__(self, conf = 'tasks.conf', workers = 2):
+        """
+        """
+        self.conf        = conf         # файл с конфигурацией задач
+        self.workers     = workers      # количество потоков выполнения
+        self.tasks_meta  = {}           # идентификаор задачи
+        self.models      = []           # список моделей
+        self.next_job_id = 0            # очередной идентификатор работы
+        self.jobs        = {}           # очередб работ
+        self.log         = None         #
+        self.running     = False        #
+        self.queue_lock  = threading.Lock()
 
         # init actions
 
@@ -67,25 +63,14 @@ class LocalServer:
         self.log.write(msg + '\n')
         print msg
 
-    def Start(self):
-        self.running = True
-        for i in xrange(self.max_workers):
-            worker = Worker(self.jobs_queue, self.queue_lock, self.running)
-            worker.start()
-
-    def Stop(self):
-        self.running = False
-
     def TestTaskData(self, data):
         pass
 
-    def LoadTasksDescriptions(self, source = 'tasks.conf'):
-        """
-        """
-        self.task_descrs = []
-
+    def LoadModels(self):
+        self.tasks_meta = {}
+        self.models = []
         self.WriteToLog('tasks interrogation starts')
-        for line in open(source, 'r'):
+        for line in open(self.conf, 'r'):
             try:
                 # нормализуем указанный путь
                 line = os.path.normpath(line)
@@ -93,14 +78,29 @@ class LocalServer:
                 # считываем данные через shell (важно для скриптовых языков)
                 textdata = subprocess.check_output([line, '-i'], shell = True,
                     cwd = os.path.dirname(line))
+
                 # загружаем данные описания задачи
                 data = json.loads(textdata)
                 # провряем их на корректность
                 self.TestTaskData(data)
-                # пакуем все в объект-описание задачи
-                task_descr = task.TaskDescription(self, line, data)
-                # добавляем в список описаний
-                self.task_descrs.append(task_descr)
+
+                # вычисляем псевдоуникальный идентификатор модели
+                tid = hash(data['meta'])
+                # сохраняем описание задачи
+                self.tasks_meta[tid] = {
+                    'title':    data.get('title', ''),
+                    'author':   data.get('author', ''),
+                    'meta':     data['meta'],
+                    'exec':     line
+                }
+
+                # выделяем описания моделей
+                ms = data.get('models', {})
+                for label, data in ms.iteritems():
+                    model_descr = task.DataDescription(None, label, data, tid)
+                    # добавляем в список описаний
+                    self.models.append(model_descr)
+
                 self.WriteToLog('Task from "{}" asked'.format(line))
             except IOError, e:
                 self.WriteToLog('file "{}" not found'.format(line))
@@ -109,166 +109,244 @@ class LocalServer:
             except ValueError, e:
                 self.WriteToLog('file "{}" not opened, error "{}")'.format(line, e))
 
-    def GetTasksDescriptions(self):
-        """
-        Return list with task descriptions
-        """
-        return self.task_descrs
+    def GetModels(self):
+        return self.models
+
+    def GetTaskMeta(self, tid):
+        return self.tasks_meta.get(tid)
+
+    #--------------------------------------------------------------------------
+
+    def CreateJob(self):
+        jid = self.next_job_id
+        self.next_job_id += 1
+        with self.queue_lock:
+            self.jobs[jid] = Job()
+        return jid
 
     def GetJobsCount(self):
-        pass
+        return len(self.jobs)
 
-    def GetJob(self, index):
-        pass
+    def GetJobState(self, jid):
+        job = self.jobs.get(jid)
+        if job != None:
+            return job.GetState()
 
-    def AddJob(self, taskd, datadump):
-        job = Job(taskd, datadump)
-        with self.queue_lock:
-            self.jobs_queue.append(job)
-        WriteToLog('Job added')
-        return job
+    def IsJobChanged(self, jid):
+        job = self.jobs.get(jid)
+        if job != None:
+            return job.IsChanged()
+        else:
+            False
+
+    def GetJobResult(self, jid):
+        job = self.jobs.get(jid)
+        if job != None:
+            return job.GetResult()
+
+    def GetJobTID(self, jid):
+        job = self.jobs.get(jid)
+        if job != None:
+            return job.tid
+
+    def LaunchJob(self, jid, data_def):
+        job = self.jobs.get(jid)
+        if job != None:
+            tid      = data_def.DD.tid
+            datadump = data_def.PackParams()
+            job.Launch(tid, datadump)
+        return True
+
+    def StopJob(self, jid):
+        job = self.jobs.get(jid)
+        if job != None:
+            job.Stop()
+
+    #--------------------------------------------------------------------------
+
+    def Start(self):
+        self.running = True
+        for i in xrange(self.workers):
+            worker = Worker(self)
+            worker.start()
+
+    def Stop(self):
+        self.running = False
 
 #-------------------------------------------------------------------------------
 
 class Worker(threading.Thread):
     number = 0
 
-    def __init__(self, queue, lock, runflag):
+    def __init__(self, server):
         threading.Thread.__init__(self)
-        self.queue = queue
-        self.lock = lock
-        self.runflag = runflag
+        self.server = server
         self.daemon = True
-        WriteToLog('worker started')
         self.id = Worker.number
         Worker.number += 1
+        WriteToLog('worker started')
+
+    def FindNextJob(self):
+        with self.server.queue_lock:
+            for jid, job in self.server.jobs.iteritems():
+                # если нашли ожидающую вызова работу
+                if job.state == JOB_READY:
+                    job.state = JOB_RUNNING # пометим, как запущенную
+                    WriteToLog('Job ({}) found'.format(jid))
+                    return job
+        return None
+
+    def ProcessJob(self, job):
+        try:
+            execpath = self.server.GetTaskMeta(job.tid)['exec']
+            # запускаем процесс на выполнение
+            proc = subprocess.Popen([execpath, '-r'], shell = True,
+                stdin = subprocess.PIPE, stdout = subprocess.PIPE,
+                stderr = subprocess.STDOUT, cwd = os.path.dirname(execpath))
+            job.proc = proc
+            # передаем стартовые параметры
+            proc.stdin.write(job.datadump + '\n')
+            proc.stdin.flush()
+            # пока процесс не завершится (или его не прибьют)
+            while proc.poll() == None:
+                msg = proc.stdout.readline()
+                self.ProcessMessage(job, msg)
+                if not self.server.running:
+                    proc.kill()
+                    raise KeyError
+        except Exception, e:
+            WriteToLog('Job loop failed: ' + str(e))
+            job.Finish(JOB_STOPPED)
+        else:
+            job.Finish(JOB_COMPLETED, 1.0)
+
+
+    def ProcessMessage(self, job, msg):
+        try:
+            # разбираем полученный ответ
+            data = json.loads(msg)
+            # извлекаем оттуда ответ
+            ans = data['answer']
+            # ответ получен ок или предупреждение
+            # записываем значение прогресса, если имеется
+            if ans == 'ok' or ans == 'warning':
+                job.percent = data.get('value', 0.0)
+            # в ответе пришел результат вычислений
+            # помещаем в секцию результата
+            elif ans == 'result':
+                job.result = data['result']
+            # произошла ошибка
+            elif ans == 'error':
+                WriteToLog('Error! ' + msg)
+            # недокументированный ответ приложения
+            else:
+                pass
+            # возможно, комментарий прольет свет на проблему
+            job.comment = data.get('comment', '')
+            # почему изменяем флаг состояния здесь в конце?
+            # потому как только после правильной обработки сообщения
+            # мы можем быть уверены, что состояние действительно изменилось
+            job.ChangeState()
+        except KeyError as e:
+            pass
+        except ValueError as e:
+            pass
 
     def Cycle(self):
-        job = None
         # найти следующее готовое к выполнению задание
-        with self.lock:
-            for j in self.queue:
-                if not j.IsBusy():
-                    job = j
-                    job.SetBusy()
-                    break
+        job = self.FindNextJob()
         # и, если нашли, приступаем к выполнению
         if job:
             WriteToLog("{} started!".format(self.id))
-            job.Start(self.runflag)
+            self.ProcessJob(job)
             WriteToLog("{} finished!".format(self.id))
         else:
             time.sleep(1)
 
     def run(self):
         while True:
-            if not self.runflag:
+            if not self.server.running:
                 return
             self.Cycle()
 
 #-------------------------------------------------------------------------------
 
 JOB_READY     = 0
-JOB_BUSY      = 1
-JOB_RUNNING   = 2
-JOB_STOPPED   = 3
-JOB_COMPLETED = 4
-JOB_DROPPED   = 5
+JOB_RUNNING   = 1
+JOB_STOPPED   = 2
+JOB_COMPLETED = 3
 
 class Job:
-    def __init__(self, taskd, datadump):
-        self.taskd   = taskd
-        self.datad   = datadump
-        self.state   = JOB_READY
-        self.percent = 0.0
-        self.comment = ''
-        self.result  = None
-        self.proc    = None
-        self.client_data = None
+    def __init__(self):
+        self.tid      = None
+        self.datadump = None
+        self.state    = JOB_STOPPED  # состояние выполнения работы
+        self.percent  = -1.0         # прогресс (от 0.0 до 1.0 или -1.0)
+        self.comment  = ''           # комментарий к ходу выполнения
+        self.result   = None         # результат вычислений
+        self.proc     = None         # ссылка на субпроцесс
+        self.state_id = 0
+        self.last_state_id = 0
 
-    def ProcessMsg(self, msg):
-        # разбираем полученный ответ
-        data = json.loads(msg)
-        # извлекаем оттуда ответ
-        ans = data['answer']
-        # ответ получен ок или предупреждение
-        # записываем значение прогресса, если имеется
-        if ans == 'ok' or ans == 'warning':
-            self.percent = data.get('value', 0.0)
-        # в ответе пришел результат вычислений
-        # помещаем в секцию результата
-        elif ans == 'result':
-            self.result = data['result']
-        # произошла ошибка
-        elif ans == 'error':
-            WriteToLog('Error! ' + msg)
-        # недокументированный ответ приложения
-        else:
-            pass
-        # возможно, комментарий прольет свет на проблему
-        self.comment = data.get('comment', '')
+    def ChangeState(self):
+        self.state_id += 1
 
+    def GetState(self):
+        self.last_state_id = self.state_id
+        return (self.state, self.percent, self.comment)
 
-    def Start(self, runflag):
-        try:
-            self.state = JOB_RUNNING
-            execpath = self.taskd.execpath
-            # запускаем процесс на выполнение
-            self.proc = subprocess.Popen([execpath, '-r'], shell = True,
-                stdin = subprocess.PIPE, stdout = subprocess.PIPE,
-                stderr = subprocess.STDOUT, cwd = os.path.dirname(execpath))
-            # передаем стартовые параметры
-            istream = self.proc.stdin
-            ostream = self.proc.stdout
-            istream.write(self.datad + '\n')
-            istream.flush()
-            # пока процесс не завершится (или его не прибьют)
-            while self.proc.poll() == None:
-                try:
-                    msg  = ostream.readline()
-                    #msg = msg.strip()
-                    self.ProcessMsg(msg)
+    def IsChanged(self):
+        return self.state_id != self.last_state_id
 
-                    if not runflag:
-                        self.Stop()
-                # todo вписать исключения, которые относятся к JSON & dict
-                except Exception, e:
-                    #WriteToLog('Income msg failed: ' + str(e))
-                    pass
-            self.state = JOB_COMPLETED
-        except Exception, e:
-            WriteToLog('Job loop failed: ' + str(e))
-            self.state = JOB_STOPPED
-
-    def SetBusy(self):
-        self.state = JOB_BUSY
-
-    def IsBusy(self):
-        return self.state != JOB_READY
-
-    def IsRunning(self):
-        return self.state == JOB_BUSY or self.state == JOB_RUNNING
-
-    def IsFinished(self):
-        return self.state == JOB_COMPLETED or self.state == JOB_STOPPED
-
-    def IsComplete(self):
-        return self.GetStatus() == JOB_COMPLETE
+    def Launch(self, tid, datadump):
+        self.tid        = tid
+        self.datadump   = datadump
+        self.state      = JOB_READY
+        self.ChangeState()
 
     def Stop(self):
         WriteToLog('Try to kill')
         if self.proc and self.proc.poll() == None:
             self.proc.kill()
+            self.ChangeState()
             WriteToLog('Job killed')
 
-    def GetState(self):
-        return self.state
+    def Finish(self, state, percent = None):
+        self.proc = None
+        self.state = state
+        if percent:
+            self.percent = percent
+        self.ChangeState()
 
     def GetResult(self):
         return self.result
 
+#-------------------------------------------------------------------------------
+
+import time, random
+from pprint import pprint
+
 def main():
-    pass
+    s = LocalServer(workers = 2)
+    s.LoadModels()
+    s.Start()
+    models = s.GetModels()
+    model = models[0]
+    md = task.DataDefinition(model)
+    md['d'] = 10
+    md['r'] = 3.14
+
+    slots = [ s.CreateJob() for i in xrange(5) ]
+    for jid in slots:
+        md['n'] = random.randint(20, 30)
+        print jid, md['n']
+        s.LaunchJob(jid, md)
+
+    time.sleep(30)
+
+    for jid in slots:
+        pprint(s.GetJobResult(jid))
+        print ''
 
 if __name__ == '__main__':
     main()

@@ -29,14 +29,13 @@ class MainFrame(forms.MainFrame):
     def __init__(self):
         forms.MainFrame.__init__(self, None)
 
-        self.server = s = server.LocalServer()
-        self.server.LoadTasksDescriptions()
-        ds = s.GetTasksDescriptions()
-        models = []
-        for d in ds:
-            models.extend(d.GetModelsDescriptions())
-        model = models[0]
+        s = server.LocalServer()
+        s.LoadModels()
+        models = s.GetModels()
         s.Start()
+        self.server = s
+
+        model = models[0]
 
         self.m_user_models.Bind(wx.EVT_TREE_SEL_CHANGED,
             self.OnModelActivated)
@@ -51,8 +50,6 @@ class MainFrame(forms.MainFrame):
         self.Bind(wx.EVT_CLOSE, self.OnClose)
         self.Bind(wx.EVT_IDLE, self.OnIdle)
 
-        self.m_params.AddPage('fp')
-
         ov = threading.Thread(target = self.Overseer)
         ov.daemon = 1
         ov.start()
@@ -66,26 +63,30 @@ class MainFrame(forms.MainFrame):
 
     def Overseer(self):
         try:
+            um = self.m_user_models
+            cycle_count = 0
             while True:
-                if True:
-                    wx.MutexGuiEnter()
-                    #print '-- cycle --'
-                    um = self.m_user_models
-                    #um.Freeze()
-                    item = um.GetRootItem()
-                    while item.IsOk():
-                        md = um.GetPyData(item)
-                        job = md.job if md else None
-                        if job and job.IsRunning():
-                            t = os.path.basename(job.taskd.execpath)
-                            p = job.percent * 100
-                            #print t, p
-                            um.SetItemText(item, str(job.GetState()), 1)
-                            um.SetItemText(item, '{}: {:.2F}%'.format(t, p), 2)
-                        item = um.GetNext(item)
-                    #um.Thaw()
-                    wx.MutexGuiLeave()
-                time.sleep(0.5)
+                wx.MutexGuiEnter()
+                print 'cycle {:-8} '.format(cycle_count)
+                cycle_count += 1
+                item = um.GetRootItem()
+                while item.IsOk():
+                    data = um.GetPyData(item)
+                    if data:
+                        jid = data[1]
+
+                        if jid != None and self.server.IsJobChanged(jid):
+                            tid     = self.server.GetJobTID(jid)
+                            meta    = self.server.GetTaskMeta(tid)
+                            t       = os.path.basename(meta['exec'])
+                            state   = self.server.GetJobState(jid)
+                            um.SetItemText(item, str(state[0]), 1)
+                            um.SetItemText(item, '{}: {:%}'.format(t, state[1]), 2)
+                            print jid, state
+
+                    item = um.GetNext(item)
+                wx.MutexGuiLeave()
+                time.sleep(0.1)
         except Exception, e:
             print 'Error in overseer: ', e
 
@@ -98,9 +99,10 @@ class MainFrame(forms.MainFrame):
         data    = task.DataDefinition(model)
 
         child   = um.AppendItem(root, 'Default')
-        um.SetPyData(child, data)
+        jid     = self.server.CreateJob()
+        um.SetPyData(child, [data, jid])
 
-    def SelectUserModel(self, model_def):
+    def SelectUserModel(self, model_def, jid):
 
         def SelectProperty(param_type):
             """
@@ -142,7 +144,7 @@ class MainFrame(forms.MainFrame):
         item = event.GetItem()
         data = self.m_user_models.GetPyData(item)
         if data:
-            self.SelectUserModel(data)
+            self.SelectUserModel(data[0], data[1])
 
     def OnParamChanging(self, event):
         #value = event.GetValue()
@@ -159,26 +161,26 @@ class MainFrame(forms.MainFrame):
         param = prop.GetClientData()
         um = self.m_user_models
         id = um.GetSelection()
-        md = um.GetItemPyData(id)
-        md[param] = value
+        data, jid = um.GetItemPyData(id)
+        data[param] = value
 
     def OnTest(self, event):
 
         um = self.m_user_models
         id = um.GetSelection()
-        md = um.GetItemPyData(id)
-        #wx.MessageBox(md.PackParams())
-        md.Flush()
-        #wx.MessageBox('test')
+        data, jid = um.GetItemPyData(id)
+
+        self.server.LaunchJob(jid, data)
 
     def OnDuplicate(self, event):
-        um = self.m_user_models
-        id = um.GetSelection()
-        title = um.GetItemText(id)
-        parent = um.GetItemParent(id)
-        md = um.GetItemPyData(id)
-        child = um.AppendItem(parent, title + ' Copy')
-        um.SetPyData(child, md.Copy())
+        um      = self.m_user_models
+        id      = um.GetSelection()
+        title   = um.GetItemText(id)
+        parent  = um.GetItemParent(id)
+        md, jid = um.GetItemPyData(id)
+        child   = um.AppendItem(parent, title + ' Copy')
+        jid     = self.server.CreateJob()
+        um.SetPyData(child, [md.Copy(), jid])
         self.SetStatusText('Copy for "{}" created'.format(title), 0)
 
     def OnIdle(self, event):

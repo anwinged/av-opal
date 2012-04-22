@@ -12,29 +12,7 @@
 # -*- coding: UTF-8 -*-
 
 import copy
-
-class TaskDescription:
-    """
-    Description of the task. Task runs on server.
-    """
-    def __init__(self, server, execpath, data):
-        """
-        ``server`` is owner of task process
-
-        ``execpath`` - path to task executable
-
-        ``data`` is parsed data presentation about models, methods
-        and meta information
-        """
-        self.server     = server
-        self.execpath   = execpath
-        self.data       = data
-        self.models     = []
-        for label, data in self.data['models'].iteritems():
-            self.models.append(DataDescription(None, label, data, self))
-
-    def GetModelsDescriptions(self):
-        return self.models
+import json
 
 #-------------------------------------------------------------------------------
 
@@ -68,14 +46,15 @@ class Parameter:
 #-------------------------------------------------------------------------------
 
 class DataDescription:
-    def __init__(self, parent, label, data, taskd):
+    def __init__(self, parent, label, data, tid):
         self.parent = parent
         self.label  = label
         self.data   = data
-        self.taskd  = taskd
+        self.tid    = tid
 
         # создание описаний параметров
         self.pdata = self.data.get('params', {})
+        # заменяем текстовое описание на объект-параметр
         for label in self.pdata:
             par = Parameter(self.pdata[label])
             self.pdata[label] = par
@@ -83,7 +62,7 @@ class DataDescription:
         self.specs = []
         # рекурсивное создание описаний спецификаций
         for label, data in self.data.get('spec', {}).iteritems():
-            self.specs.append(DataDescription(self, label, data, self.taskd))
+            self.specs.append(DataDescription(self, label, data, self.tid))
 
     def GetLabel(self):
         return self.label
@@ -142,50 +121,3 @@ class DataDefinition:
         package.reverse()
         return json.dumps(package)
 
-    def Flush(self):
-        server = self.DD.taskd.server
-        datadump = self.PackParams()
-        self.job = server.AddJob(self.DD.taskd, datadump)
-
-#-------------------------------------------------------------------------------
-
-import server, json, time
-from pprint import pprint
-
-def main():
-    s = server.LocalServer()
-    s.LoadTasksDescriptions()
-    ds = s.GetTasksDescriptions()
-    models = []
-    for d in ds:
-        models.extend(d.GetModelsDescriptions())
-
-    model = models[0]
-
-    mdef = DataDefinition(model)
-    pprint(mdef.DD.data)
-    mdef['r'] = 3.14
-    mdef['n'] = 5
-    mdef['d'] = 0
-    mdef2 = mdef.Copy()
-    mdef2['d'] = 30
-    p = mdef.PackParams()
-    pprint(p)
-    p = mdef2.PackParams()
-    pprint(p)
-
-    #mdef.Flush()
-    mdef2.Flush()
-
-    time.sleep(1)
-    mdef2.job.Stop()
-
-    time.sleep(5)
-    print mdef2.job.GetState()
-
-    print 'RESULT'
-    #pprint(mdef.job.result)
-    pprint(mdef2.job.result)
-
-if __name__ == '__main__':
-    main()

@@ -1,6 +1,7 @@
 {
     "title": "Example task",
     "author": "Anton Vakhrushev",
+    "meta": "av-example-task",
 
     "models": {
 

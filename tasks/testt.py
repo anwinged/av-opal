@@ -42,10 +42,7 @@ def result(r):
     return json.dumps({
         "answer": "result",
         "result": {
-            "table": {
-                "head": [{"x": "double"}, {"y": "double"}],
-                "body": r
-            }
+            "table": [[ {"x": "double"}, {"y": "double"} ]] + r
         }
     })
 
@@ -81,7 +78,7 @@ def main():
                 res.append([l, y])
                 write(answer(l / r))
                 l += h
-                time.sleep(0.2)
+                #time.sleep(0.1)
 
             write(result(res))
 

@@ -44,6 +44,7 @@ class MainFrame (wx.Frame):
         # WARNING: wxPython code generation isn't supported for this widget yet.
         self.m_params = wxpg.PropertyGridManager(self,
             style = wxpg.PG_TOOLBAR)
+        self.m_params.AddPage('fp')
         bSizer4.Add(self.m_params, 1, wx.EXPAND |wx.ALL, 1)
 
         bSizer3.Add(bSizer4, 1, wx.EXPAND, 5)

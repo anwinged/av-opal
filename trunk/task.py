@@ -76,7 +76,10 @@ class DataDescription:
     def GetId(self):
         return None
 
-    def GetSpecifications(self):
+    def GetParent(self):
+        return self.parent
+
+    def GetSpecs(self):
         return self.specs
 
     def IsExecutable(self):

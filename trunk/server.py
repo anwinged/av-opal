@@ -30,6 +30,9 @@ def WriteToLog(msg):
         #self.log.write(msg + '\n')
         print msg
 
+class JIDError(Exception):
+    def __str__(self):
+        return 'Invalid jid'
 
 class LocalServer:
     def __init__(self, conf = 'tasks.conf', workers = 2):
@@ -126,6 +129,9 @@ class LocalServer:
 
     def GetJobsCount(self):
         return len(self.jobs)
+
+    #def CheckJID(self, func):
+    #    def
 
     def GetJobState(self, jid):
         job = self.jobs.get(jid)
@@ -302,6 +308,7 @@ class Job:
         self.tid        = tid
         self.datadump   = datadump
         self.state      = JOB_READY
+        self.percent    = -1.0
         self.ChangeState()
 
     def Stop(self):

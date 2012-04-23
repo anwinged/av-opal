@@ -4,11 +4,12 @@ import wx
 import wx.gizmos
 import wx.propgrid as wxpg
 
-ID_TEST             = wx.NewId()
-ID_DUPLICATE        = wx.NewId()
-ID_DUPLICATE_MODEL  = wx.NewId()
-ID_DELETE_MODEL     = wx.NewId()
-ID_PROCESS_MODEL    = wx.NewId()
+ID_TEST                 = wx.NewId()
+ID_ADD_MODEL_ROOT       = wx.NewId()
+ID_ADD_MODEL_SELECTED   = wx.NewId()
+ID_DUPLICATE_MODEL      = wx.NewId()
+ID_DELETE_MODEL         = wx.NewId()
+ID_PROCESS_MODEL        = wx.NewId()
 
 class MyTreeListCtrl(wx.gizmos.TreeListCtrl):
     def Refresh(self, erase, rect):
@@ -23,7 +24,7 @@ class MainFrame (wx.Frame):
 
         bSizer3 = wx.BoxSizer(wx.HORIZONTAL)
 
-        self.m_specs = wx.TreeCtrl(self, style = wx.TR_DEFAULT_STYLE|wx.TR_HIDE_ROOT)
+        self.m_specs = wx.TreeCtrl(self, style = wx.TR_DEFAULT_STYLE)
         self.m_specs.SetMinSize(wx.Size(150,-1))
 
         bSizer3.Add(self.m_specs, 0, wx.ALL|wx.EXPAND, 1)
@@ -33,11 +34,13 @@ class MainFrame (wx.Frame):
         self.m_user_models = wx.gizmos.TreeListCtrl(self,
         #self.m_user_models = MyTreeListCtrl(self,
         #self.m_user_models = wx.TreeCtrl(self,
-            style = wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT | wx.TR_EDIT_LABELS | wx.TR_ROW_LINES)
+            style = wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT
+                    | wx.TR_EDIT_LABELS | wx.TR_ROW_LINES | wx.TR_MULTIPLE)
         self.m_user_models.SetMinSize(wx.Size(-1, 200))
         self.m_user_models.AddColumn("Model name")
         self.m_user_models.AddColumn("Status")
         self.m_user_models.AddColumn("Progress")
+        self.m_user_models.AddColumn("Comment")
 
         bSizer4.Add(self.m_user_models, 0, wx.ALL|wx.EXPAND, 1)
 
@@ -59,6 +62,7 @@ class MainFrame (wx.Frame):
 
         mbar = self.BuildMenu()
         self.SetMenuBar(mbar)
+        self.BuildContextMenu()
 
         self.SetSizer(bSizer3)
         self.Layout()
@@ -76,8 +80,14 @@ class MainFrame (wx.Frame):
         menubar.Append(menu, '&File')
 
         menu = wx.Menu()
-        menu.Append(ID_TEST, "&Test\tCtrl+U")
-        menu.Append(ID_DUPLICATE, "&Duplicate\tCtrl+D")
+        menu.Append(ID_TEST, "&Test\tCtrl+T")
+        menu.Append(ID_ADD_MODEL_ROOT, 'Add model to root')
+        menu.Append(ID_ADD_MODEL_SELECTED, 'Append model to selected')
+        #menu.AppendSeparator()
+        menu.Append(ID_DUPLICATE_MODEL, "&Duplicate\tCtrl+D")
+        menu.Append(ID_DELETE_MODEL, 'Delete')
+        menu.AppendSeparator()
+        menu.Append(ID_PROCESS_MODEL, 'Process\tCtrl+R')
         menubar.Append(menu, '&Model')
 
         menu = wx.Menu()
@@ -86,3 +96,11 @@ class MainFrame (wx.Frame):
         menubar.Append(menu, '&Help')
 
         return menubar
+
+    def BuildContextMenu(self):
+
+        menu = wx.Menu()
+        menu.Append(ID_ADD_MODEL_ROOT, 'Add model to root')
+        menu.Append(ID_ADD_MODEL_SELECTED, 'Add model to selected')
+        self.m_specs.Bind(wx.EVT_CONTEXT_MENU,
+            lambda x: self.m_specs.PopupMenu(menu))

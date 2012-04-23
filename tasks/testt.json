@@ -1,13 +1,13 @@
 {
     "title": "Example task",
     "author": "Anton Vakhrushev",
-    "meta": "av-example-task",
+    "meta": "av-example-task-version-00-10",
 
     "models": {
 
         "sintaylor": {
 
-            "title": "Simple model for example",
+            "title": "Simple model",
             "author": "Anton Vakhrushev",
             "date": "2012-03-08",
 
@@ -31,9 +31,24 @@
 
                 "n": {
                     "type":     "int",
-                    "default":  10,
+                    "default":  100,
                     "title":    "Steps",
                     "comment":  "Number of steps for algorithm"
+                }
+            },
+
+            "spec": {
+
+                "left": {
+                    "title": "Left"
+                },
+
+                "right": {
+                    "title": "Right"
+                },
+
+                "trapezium": {
+                    "title": "Trapezium"
                 }
             }
         }

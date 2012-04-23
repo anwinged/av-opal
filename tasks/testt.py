@@ -26,10 +26,11 @@ def sin_taylor(x, n):
         e *= -1
     return s
 
-def answer(p):
+def answer(p, c = ''):
     return json.dumps({
         "answer": "ok",
-        "value": p
+        "value": p,
+        "comment": c
     })
 
 def error(msg):
@@ -61,7 +62,7 @@ def main():
             textdata = raw_input()
             data = json.loads(textdata)
 
-            if not len(data) and data[0]['label'] != 'sintaylor':
+            if not len(data) or data[-1]['label'] != 'sintaylor':
                 write(error('Unknown model'))
                 sys.exit(1)
 
@@ -76,9 +77,9 @@ def main():
             while l <= r:
                 y = sin_taylor(l, d)
                 res.append([l, y])
-                write(answer(l / r))
+                write(answer(l / r, data[-1]['label']))
                 l += h
-                #time.sleep(0.1)
+                time.sleep(0.1)
 
             write(result(res))
 

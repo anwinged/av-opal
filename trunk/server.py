@@ -42,7 +42,7 @@ class LocalServer:
         self.workers     = workers      # количество потоков выполнения
         self.tasks_meta  = {}           # идентификаор задачи
         self.models      = []           # список моделей
-        self.next_job_id = 0            # очередной идентификатор работы
+        self.next_job_id = 1            # очередной идентификатор работы
         self.jobs        = {}           # очередб работ
         self.log         = None         #
         self.running     = False        #
@@ -167,6 +167,12 @@ class LocalServer:
         job = self.jobs.get(jid)
         if job != None:
             job.Stop()
+
+    def DeleteJob(self, jid):
+        job = self.jobs.get(jid)
+        if job != None:
+            job.Stop()
+            del self.jobs[jid]
 
     #--------------------------------------------------------------------------
 
@@ -343,13 +349,13 @@ def main():
     md['d'] = 10
     md['r'] = 3.14
 
-    slots = [ s.CreateJob() for i in xrange(5) ]
+    slots = [ s.CreateJob() for i in xrange(1) ]
     for jid in slots:
         md['n'] = random.randint(20, 30)
         print jid, md['n']
         s.LaunchJob(jid, md)
 
-    time.sleep(30)
+    time.sleep(5)
 
     for jid in slots:
         pprint(s.GetJobResult(jid))

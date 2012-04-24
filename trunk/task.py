@@ -32,16 +32,11 @@ class Parameter:
     def GetDefault(self):
         return self.data.get('default')
 
-    def GetTestExpresion(self):
+    def GetTestExpression(self):
         return self.data.get('test')
 
     def Test(self, value):
         return True
-
-    #def __repr__(self):
-    #    return "'{}'".format(
-    #        self.GetType()
-    #    )
 
 #-------------------------------------------------------------------------------
 
@@ -88,6 +83,9 @@ class DataDescription:
     def __getitem__(self, label):
         return self.pdata.get(label)
 
+    def type(self):
+        return 'data-def'
+
 #-------------------------------------------------------------------------------
 
 class DataDefinition:
@@ -124,3 +122,14 @@ class DataDefinition:
         package.reverse()
         return json.dumps(package)
 
+    def type(self):
+        return 'data-def'
+
+#-------------------------------------------------------------------------------
+
+class ResultData:
+    def __init__(self, data):
+        self.data = data
+
+    def GetColumns(self):
+        pass

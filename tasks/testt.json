@@ -11,13 +11,13 @@
             "author": "Anton Vakhrushev",
             "date": "2012-03-08",
 
-            "exec": true,
+            "exec": false,
 
             "params": {
 
                 "r": {
                     "type":     "float",
-                    "default":  6.28,
+                    "default":  6.283185307,
                     "title":    "Right edge",
                     "comment":  "Right edge"
                 },

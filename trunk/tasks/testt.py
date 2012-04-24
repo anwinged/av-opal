@@ -2,8 +2,8 @@
 
 # Тестовое приложение для проекта Opal
 # Вычисление значений синуса по формулам Тейлора
-# Вычисляет значения для указанного диапазона с заданной точностью
-#   и нужным количеством шагов
+# Вычисляет значения для указанного диапазона
+#  с заданной точностью и нужным количеством шагов
 
 import sys
 import json
@@ -43,12 +43,12 @@ def result(s, t):
     return json.dumps({
         "answer": "result",
         "result": {
-            "data": s,
+            "data":  s,
             "table": t
         }})
 
 def serie(n, d, h, l = 0):
-    for i in xrange(n):
+    for i in xrange(n + 1):
         y = sin_taylor(l, d)
         yield (l, y)
         l += h
@@ -87,17 +87,17 @@ def main():
                     [[ ['x', 'double'], [ 'y', 'double' ] ]] + res))
 
             elif label == 'left':
-                for x, y in serie(n-1, d, h):
+                for x, y in serie(n - 1, d, h):
                     s = y * h
                     res.append([x, y, s])
                     write(answer(x / r, label))
                     sum += s
                 write(result(
                     { 'sum': sum },
-                    [[ ['x', 'double'], [ 'y', 'double' ], [ 's', 'double' ] ]] + res))
+                    [[ ['x', 'double'], [ 'y', 'double' ], [ 's', 'double', 'Delta sum' ] ]] + res))
 
             elif label == 'right':
-                for x, y in serie(n-1, d, h, h):
+                for x, y in serie(n - 1, d, h, h):
                     s = y * h
                     res.append([x, y, s])
                     write(answer(x / r, label))
@@ -108,7 +108,7 @@ def main():
 
             elif label == 'trapezium':
                 prev = 0
-                for x, y in serie(n + 1, d, h):
+                for x, y in serie(n, d, h):
                     s = 0.5 * (y + prev) * h
                     res.append([x, y, s])
                     write(answer(x / r, label))

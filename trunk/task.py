@@ -17,14 +17,18 @@ import json
 #-------------------------------------------------------------------------------
 
 class Parameter:
-    def __init__(self, data):
+    def __init__(self, label, data):
         self.data = data
+        self.data['label'] = label
+
+    def GetLabel(self):
+        return self.data['label']
 
     def GetType(self):
         return self.data['type']
 
     def GetTitle(self):
-        return self.data.get('title', '')
+        return self.data.get('title', self.GetLabel())
 
     def GetComment(self):
         return self.data.get('comment', '')
@@ -37,6 +41,34 @@ class Parameter:
 
     def Test(self, value):
         return True
+
+class Value(Parameter):
+    def __init__(self, label, value):
+        if isinstance(value, dict):
+            self.data = value
+        else:
+            self.data = {
+                'value': value,
+                'type':  value.__class__.__name__
+            }
+        self.data['label'] = label
+
+    def GetType(self):
+        return self.data.get('type', 'unknown')
+
+    def GetValue(self):
+        return self.data['value']
+
+class Column(Parameter):
+    def __init__(self, colvalues):
+        self.data = {}
+        # следующие два поля должны обязательно присутствовать
+        self.data['label'] = colvalues[0]
+        self.data['type']  = colvalues[1]
+        try:
+            self.data['title'] = colvalues[2]
+        except:
+            pass
 
 #-------------------------------------------------------------------------------
 
@@ -51,7 +83,7 @@ class DataDescription:
         self.pdata = self.data.get('params', {})
         # заменяем текстовое описание на объект-параметр
         for label in self.pdata:
-            par = Parameter(self.pdata[label])
+            par = Parameter(label, self.pdata[label])
             self.pdata[label] = par
 
         self.specs = []
@@ -129,7 +161,23 @@ class DataDefinition:
 
 class ResultData:
     def __init__(self, data):
-        self.data = data
+        self.data = {}
+        for key, value in data.get('data', {}).iteritems():
+            self.data[key] = Value(key, value)
+
+        table = data.get('table', [])
+        self.head  = {}
+        self.table = []
+        if table:
+            self.head  = [ Column(item) for item in table[0] ]
+            self.table = table[1:]
 
     def GetColumns(self):
-        pass
+        return self.head
+
+    columns = property(GetColumns)
+
+    def GetRows(self):
+        return self.table
+
+    rows = property(GetRows)

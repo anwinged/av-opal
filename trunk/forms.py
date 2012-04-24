@@ -47,7 +47,7 @@ class MainFrame (wx.Frame):
         bSizer3 = wx.BoxSizer(wx.HORIZONTAL)
 
         self.m_specs = wx.TreeCtrl(self, style = wx.TR_DEFAULT_STYLE)
-        self.m_specs.SetMinSize(wx.Size(150,-1))
+        self.m_specs.SetMinSize(wx.Size(200,-1))
 
         bSizer3.Add(self.m_specs, 0, wx.ALL|wx.EXPAND, 1)
 
@@ -56,25 +56,32 @@ class MainFrame (wx.Frame):
         self.m_user_models = TreeListCtrl(self,
             style = wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT
                     | wx.TR_EDIT_LABELS | wx.TR_ROW_LINES | wx.TR_MULTIPLE)
-        self.m_user_models.SetMinSize(wx.Size(-1, 200))
+        self.m_user_models.SetMinSize(wx.Size(-1, 300))
         self.m_user_models.AddColumn("Model name")
         self.m_user_models.AddColumn("Status")
         self.m_user_models.AddColumn("Progress")
         self.m_user_models.AddColumn("Comment")
 
-        bSizer4.Add(self.m_user_models, 0, wx.ALL|wx.EXPAND, 1)
+        bSizer4.Add(self.m_user_models, 0, wx.ALL | wx.EXPAND, 1)
 
         # WARNING: wxPython code generation isn't supported for this widget yet.
         self.m_params = wxpg.PropertyGridManager(self)
         self.m_params.AddPage('fp')
-        bSizer4.Add(self.m_params, 1, wx.EXPAND |wx.ALL, 1)
+        bSizer4.Add(self.m_params, 1, wx.EXPAND | wx.ALL, 1)
 
         bSizer3.Add(bSizer4, 1, wx.EXPAND, 5)
 
-        self.m_job_list = wx.ListBox(self)#, style = wx.LC_LIST)
-        self.m_job_list.SetMinSize(wx.Size(200,-1))
+        bSizer5 = wx.BoxSizer(wx.VERTICAL)
 
-        bSizer3.Add(self.m_job_list, 0, wx.ALL|wx.EXPAND, 1)
+        self.m_quick_result = wxpg.PropertyGridManager(self)
+        self.m_quick_result.AddPage('fp')
+        self.m_quick_result.SetMinSize(wx.Size(200, -1))
+        bSizer5.Add(self.m_quick_result, 1, wx.EXPAND | wx.ALL, 1)
+
+        self.m_plots = wx.TreeCtrl(self, style = wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT)
+        bSizer5.Add(self.m_plots, 1, wx.EXPAND | wx.ALL, 1)        
+
+        bSizer3.Add(bSizer5, 0, wx.ALL | wx.EXPAND, 1)
 
         sbar = wx.StatusBar(self)
         self.SetStatusBar(sbar)
@@ -130,7 +137,8 @@ class MainFrame (wx.Frame):
 
 class ResultFrame(wx.Frame):
     def __init__(self, parent, title):
-        wx.Frame.__init__ (self, parent, -1, title, size = wx.Size(600, 400))
+        wx.Frame.__init__ (self, parent, -1, title, size = wx.Size(500, 500),
+                style = wx.DEFAULT_FRAME_STYLE)
 
         sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -140,8 +148,8 @@ class ResultFrame(wx.Frame):
         self.table = wx.grid.Grid(self)
         self.table.SetDefaultCellAlignment(wx.ALIGN_CENTER, wx.ALIGN_CENTER)
 
-        sizer.Add(self.scalar, 0, wx.EXPAND |wx.ALL, 1)
-        sizer.Add(self.table,  1, wx.EXPAND |wx.ALL, 1)
+        sizer.Add(self.scalar, 0, wx.EXPAND | wx.ALL, 1)
+        sizer.Add(self.table,  1, wx.EXPAND | wx.ALL, 1)
 
         self.SetSizer(sizer)
         self.Layout()

@@ -246,7 +246,7 @@ class Worker(threading.Thread):
             # в ответе пришел результат вычислений
             # помещаем в секцию результата
             elif ans == 'result':
-                job.result = data['result']
+                job.result = task.ResultData(data['result'])
             # произошла ошибка
             elif ans == 'error':
                 WriteToLog('Error! ' + msg)

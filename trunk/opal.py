@@ -65,6 +65,11 @@ class MainFrame(forms.MainFrame):
             self.OnParamChanging)
         self.m_params.Bind(wxpg.EVT_PG_CHANGED,
             self.OnParamChanged)
+        self.m_specs.Bind(wx.EVT_TREE_ITEM_ACTIVATED,
+            self.OnAddModelToSelected)
+        self.m_user_models.Bind(wx.EVT_TREE_ITEM_ACTIVATED,
+            self.OnModelProcess)
+
 
         self.Bind(wx.EVT_MENU, self.OnTest,
             id = forms.ID_TEST)
@@ -136,9 +141,15 @@ class MainFrame(forms.MainFrame):
                         p = 'Unknown' if percent < 0 else '{:%}'.format(percent)
                         um.SetItemText(item, p, 2)
                         um.SetItemText(item, comment, 3)
-                        print jid, (state, percent, comment)
+                        print 'JID', jid, (state, percent, comment)
+                        # завершающие действия по окончанию выполнения работы
                         if state == server.JOB_COMPLETED:
+                            # получаем результаты выполнения
                             data.res = self.server.GetJobResult(jid)
+                            # если завершившаяся задача в данный момент выделена
+                            # то сразу же показываем этот результат
+                            if um.IsSelected(item):
+                                self.ShowQuickResult(data.res)
 
                 wx.MutexGuiLeave()
                 time.sleep(0.1)
@@ -238,13 +249,13 @@ class MainFrame(forms.MainFrame):
             Смотри руководство пользователя для того, чтобы получить полную
             информацию о всех типах данных, используемых в Opal.
             """
-            if param_type == 'bool':
+            if   param_type == 'bool' or param_type == 'boolean':
                 return wxpg.BoolProperty
             elif param_type == 'int':
                 return wxpg.IntProperty
             elif param_type == 'float' or param_type == 'double':
                 return wxpg.FloatProperty
-            elif param_type == 'string':
+            elif param_type == 'str' or param_type == 'string':
                 return wxpg.StringProperty
             elif param_type == 'list':
                 return wxpg.ArrayStringProperty
@@ -257,13 +268,22 @@ class MainFrame(forms.MainFrame):
         pg.ClearPage(0)
         for label, value in model_def.params.iteritems():
             param   = model_def.DD[label]
-            title   = param.GetTitle() or label
+            title   = param.GetTitle()
             prop    = SelectProperty(param.GetType())
             pid     = pg.Append(prop(title, value = value))
             pg.SetPropertyClientData(pid, label)
             pg.SetPropertyHelpString(pid, param.GetComment())
 
         self.SetStatusText(model_def.PackParams(), 0)
+
+    def ShowQuickResult(self, result):
+        if not result:
+            return
+        pg = self.m_quick_result
+        pg.ClearPage(0)
+        for label, param in result.data.iteritems():
+            pg.Append(wxpg.StringProperty(label, value = str(param.GetValue())))
+        pg.SetSplitterLeft()
 
     def GetSelectedItem(self, source):
         item = source.GetSelection()
@@ -291,6 +311,7 @@ class MainFrame(forms.MainFrame):
         data = self.m_user_models.GetPyData(item)
         if data:
             self.SelectUserModel(data.mdef)
+            self.ShowQuickResult(data.res)
 
     def OnParamChanging(self, event):
         #value = event.GetValue()
@@ -389,27 +410,26 @@ class ResultFrame(forms.ResultFrame):
     def UpdateResults(self):
         self.scalar.ClearPage(0)
         self.table.ClearGrid()
-        if self.result:
-            table = self.result.get('table', [])
-            if table and len(table):
-                cols = len(table[0])
-                rows = len(table) - 1
-                self.table.CreateGrid(rows, cols)
-                #
-                for i, col in enumerate(table[0]):
-                    label = "{} ({})".format(col[0], col[1])
-                    self.table.SetColLabelValue(i, label)
-                #
-                for ri, row in enumerate(table[1:]):
-                    for ci, value in enumerate(row):
-                        self.table.SetCellValue(ri, ci, str(value))
+        if not self.result:
+            return
 
-                self.table.AutoSize()
+        cols = len(self.result.columns)
+        rows = len(self.result.rows)
+        self.table.CreateGrid(rows, cols)
+        #
+        for i, col in enumerate(self.result.columns):
+            label = "{} ({} {})".format(col.GetTitle(), col.GetType(), col.GetLabel())
+            self.table.SetColLabelValue(i, label)
+        #
+        for i, row in enumerate(self.result.rows):
+            for j, value in enumerate(row):
+                self.table.SetCellValue(i, j, str(value))
 
-            data = self.result.get('data', {})
-            pg = self.scalar
-            for label, value in data.iteritems():
-                pid = pg.Append(wxpg.StringProperty(label, value = str(value)))
+        self.table.AutoSize()
+
+        pg = self.scalar
+        for label, param in self.result.data.iteritems():
+            pg.Append(wxpg.StringProperty(label, value = str(param.GetValue())))
 
 #-----------------------------------------------------------------------------
 # Приложение

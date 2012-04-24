@@ -7,7 +7,7 @@
 
         "sintaylor": {
 
-            "title": "Simple model",
+            "title": "Sin Taylor",
             "author": "Anton Vakhrushev",
             "date": "2012-03-08",
 
@@ -40,11 +40,11 @@
             "spec": {
 
                 "left": {
-                    "title": "Left"
+                    "title": "Left rectangles"
                 },
 
                 "right": {
-                    "title": "Right"
+                    "title": "Right rectangles"
                 },
 
                 "trapezium": {

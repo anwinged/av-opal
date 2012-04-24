@@ -39,13 +39,20 @@ def error(msg):
         "comment": msg
     })
 
-def result(r):
+def result(s, t):
     return json.dumps({
         "answer": "result",
         "result": {
-            "table": [[ {"x": "double"}, {"y": "double"} ]] + r
-        }
-    })
+            "data": s,
+            "table": t
+        }})
+
+def serie(n, d, h, l = 0):
+    for i in xrange(n):
+        y = sin_taylor(l, d)
+        yield (l, y)
+        l += h
+        time.sleep(0.01)
 
 def main():
 
@@ -62,26 +69,55 @@ def main():
             textdata = raw_input()
             data = json.loads(textdata)
 
-            if not len(data) or data[-1]['label'] != 'sintaylor':
-                write(error('Unknown model'))
-                sys.exit(1)
-
             params = data[0]['params']
-            l = 0                   # левая граница
             r = params['r']         # правая граница
             n = params['n']         # количество шагов
             d = params['d']         # количество членов в разложении Тейлора
-            h = float(r - l) / n    # шаг сетки по х
+            h = r / n
             res = []                # таблица резултатов
 
-            while l <= r:
-                y = sin_taylor(l, d)
-                res.append([l, y])
-                write(answer(l / r, data[-1]['label']))
-                l += h
-                time.sleep(0.1)
+            label = data[-1]['label']
+            sum = 0
 
-            write(result(res))
+            if   label == 'sintaylor':
+                for x, y in serie(n, d, h):
+                    res.append([x, y])
+                    write(answer(x / r, label))
+                write(result({},
+                    [[ ['x', 'double'], [ 'y', 'double' ] ]] + res))
+
+            elif label == 'left':
+                for x, y in serie(n-1, d, h):
+                    s = y * h
+                    res.append([x, y, s])
+                    write(answer(x / r, label))
+                    sum += s
+                write(result(
+                    { 'sum': sum },
+                    [[ ['x', 'double'], [ 'y', 'double' ], [ 's', 'double' ] ]] + res))
+
+            elif label == 'right':
+                for x, y in serie(n-1, d, h, h):
+                    s = y * h
+                    res.append([x, y, s])
+                    write(answer(x / r, label))
+                    sum += s
+                write(result(
+                    { 'sum': sum },
+                    [[ ['x', 'double'], [ 'y', 'double' ], [ 's', 'double' ] ]] + res))
+
+            elif label == 'trapezium':
+                prev = 0
+                for x, y in serie(n + 1, d, h):
+                    s = 0.5 * (y + prev) * h
+                    res.append([x, y, s])
+                    write(answer(x / r, label))
+                    sum += s
+                    prev = y
+                write(result(
+                    { 'sum': sum },
+                    [[ ['x', 'double'], [ 'y', 'double' ], [ 's', 'double' ] ]] + res))
+
 
     except Exception, e:
         write(error('Fatal error: ' + str(e)))

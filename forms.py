@@ -2,18 +2,40 @@
 
 import wx
 import wx.gizmos
+import wx.grid
 import wx.propgrid as wxpg
+import wx.lib.plot as wxplot
 
 ID_TEST                 = wx.NewId()
 ID_ADD_MODEL_ROOT       = wx.NewId()
 ID_ADD_MODEL_SELECTED   = wx.NewId()
 ID_DUPLICATE_MODEL      = wx.NewId()
+ID_DUPLICATE_TREE       = wx.NewId()
 ID_DELETE_MODEL         = wx.NewId()
 ID_PROCESS_MODEL        = wx.NewId()
+ID_SHOW_RESULT          = wx.NewId()
+ID_SHOW_PLOT            = wx.NewId()
 
-class MyTreeListCtrl(wx.gizmos.TreeListCtrl):
-    def Refresh(self, erase, rect):
-        wx.gizmos.TreeListCtrl.Refresh(False, rect)
+class TreeListCtrl(wx.gizmos.TreeListCtrl):
+
+    def __iter__(self):
+        return TreeListCtrlIterator(self)
+
+class TreeListCtrlIterator:
+    def __init__(self, owner):
+        self.owner = owner
+        self.item = self.owner.GetRootItem()
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        if not self.item.IsOk():
+            raise StopIteration
+        item = self.item
+        self.item = self.owner.GetNext(self.item)
+        return item
+
 
 class MainFrame (wx.Frame):
 
@@ -31,9 +53,7 @@ class MainFrame (wx.Frame):
 
         bSizer4 = wx.BoxSizer(wx.VERTICAL)
 
-        self.m_user_models = wx.gizmos.TreeListCtrl(self,
-        #self.m_user_models = MyTreeListCtrl(self,
-        #self.m_user_models = wx.TreeCtrl(self,
+        self.m_user_models = TreeListCtrl(self,
             style = wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT
                     | wx.TR_EDIT_LABELS | wx.TR_ROW_LINES | wx.TR_MULTIPLE)
         self.m_user_models.SetMinSize(wx.Size(-1, 200))
@@ -45,8 +65,7 @@ class MainFrame (wx.Frame):
         bSizer4.Add(self.m_user_models, 0, wx.ALL|wx.EXPAND, 1)
 
         # WARNING: wxPython code generation isn't supported for this widget yet.
-        self.m_params = wxpg.PropertyGridManager(self,
-            style = wxpg.PG_TOOLBAR)
+        self.m_params = wxpg.PropertyGridManager(self)
         self.m_params.AddPage('fp')
         bSizer4.Add(self.m_params, 1, wx.EXPAND |wx.ALL, 1)
 
@@ -80,14 +99,18 @@ class MainFrame (wx.Frame):
         menubar.Append(menu, '&File')
 
         menu = wx.Menu()
-        menu.Append(ID_TEST, "&Test\tCtrl+T")
+        menu.Append(ID_PROCESS_MODEL, 'Process\tCtrl+R')
+        menu.Append(ID_SHOW_RESULT, 'Show result\tCtrl+S')
+        menu.Append(ID_SHOW_PLOT, 'Show plot\tCtrl+G')
+        menu.AppendSeparator()
         menu.Append(ID_ADD_MODEL_ROOT, 'Add model to root')
         menu.Append(ID_ADD_MODEL_SELECTED, 'Append model to selected')
-        #menu.AppendSeparator()
-        menu.Append(ID_DUPLICATE_MODEL, "&Duplicate\tCtrl+D")
-        menu.Append(ID_DELETE_MODEL, 'Delete')
         menu.AppendSeparator()
-        menu.Append(ID_PROCESS_MODEL, 'Process\tCtrl+R')
+        menu.Append(ID_DUPLICATE_MODEL, "&Duplicate\tCtrl+D")
+        menu.Append(ID_DUPLICATE_TREE, "&Duplicate with subitems\tCtrl+Shift+D")
+        menu.Append(ID_DELETE_MODEL, 'Delete\tCtrl+E')
+        menu.AppendSeparator()
+        menu.Append(ID_TEST, "&Test\tCtrl+T")
         menubar.Append(menu, '&Model')
 
         menu = wx.Menu()
@@ -104,3 +127,28 @@ class MainFrame (wx.Frame):
         menu.Append(ID_ADD_MODEL_SELECTED, 'Add model to selected')
         self.m_specs.Bind(wx.EVT_CONTEXT_MENU,
             lambda x: self.m_specs.PopupMenu(menu))
+
+class ResultFrame(wx.Frame):
+    def __init__(self, parent, title):
+        wx.Frame.__init__ (self, parent, -1, title, size = wx.Size(600, 400))
+
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        self.scalar = wxpg.PropertyGridManager(self)
+        self.scalar.AddPage('fp')
+
+        self.table = wx.grid.Grid(self)
+        self.table.SetDefaultCellAlignment(wx.ALIGN_CENTER, wx.ALIGN_CENTER)
+
+        sizer.Add(self.scalar, 0, wx.EXPAND |wx.ALL, 1)
+        sizer.Add(self.table,  1, wx.EXPAND |wx.ALL, 1)
+
+        self.SetSizer(sizer)
+        self.Layout()
+        self.Centre(wx.BOTH)
+
+class PlotFrame(wx.Frame):
+    def __init__(self, parent, title):
+        wx.Frame.__init__ (self, parent, -1, title, size = wx.Size(600, 400))
+
+        self.plot = wxplot.PlotCanvas(self)

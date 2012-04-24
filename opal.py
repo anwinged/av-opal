@@ -22,6 +22,25 @@ import os
 import threading
 import re
 
+class ModelData:
+    def __init__(self, server, model, parent_data = None):
+        # если мы создаем новый набор данных из описания модели
+        if isinstance(model, task.DataDescription):
+            self.mdef = task.DataDefinition(model, parent_data)
+            self.jid  = server.CreateJob() if model.IsExecutable() else None
+        # если мы создаем набор данных из другого набора данных
+        elif isinstance(model, ModelData):
+            self.mdef = model.mdef.Copy()
+            self.jid  = server.CreateJob() if model.jid != None else None
+        else:
+            self.mdef = None
+            self.jid  = None
+
+        self.res  = None
+
+class ItemError(Exception):
+    pass
+
 #-----------------------------------------------------------------------------
 # Главная форма
 #-----------------------------------------------------------------------------
@@ -47,21 +66,28 @@ class MainFrame(forms.MainFrame):
         self.m_params.Bind(wxpg.EVT_PG_CHANGED,
             self.OnParamChanged)
 
-        self.Bind(wx.EVT_MENU, self.OnTest, id = forms.ID_TEST)
+        self.Bind(wx.EVT_MENU, self.OnTest,
+            id = forms.ID_TEST)
         self.Bind(wx.EVT_MENU, self.OnAddModelToRoot,
             id = forms.ID_ADD_MODEL_ROOT)
         self.Bind(wx.EVT_MENU, self.OnAddModelToSelected,
             id = forms.ID_ADD_MODEL_SELECTED)
         self.Bind(wx.EVT_MENU, self.OnDuplicate,
             id = forms.ID_DUPLICATE_MODEL)
+        self.Bind(wx.EVT_MENU, self.OnDuplicateTree,
+            id = forms.ID_DUPLICATE_TREE)
+        self.Bind(wx.EVT_MENU, self.OnDeleteModel,
+            id = forms.ID_DELETE_MODEL)
         self.Bind(wx.EVT_MENU, self.OnModelProcess,
             id = forms.ID_PROCESS_MODEL)
+        self.Bind(wx.EVT_MENU, self.OnShowResult,
+            id = forms.ID_SHOW_RESULT)
 
         self.Bind(wx.EVT_CLOSE, self.OnClose)
         self.Bind(wx.EVT_IDLE, self.OnIdle)
 
         ov = threading.Thread(target = self.Overseer)
-        ov.daemon = 1
+        ov.daemon = True
         ov.start()
 
         self.NewProject(model)
@@ -72,6 +98,12 @@ class MainFrame(forms.MainFrame):
         self.Destroy()
 
     def Overseer(self):
+        """
+        Функция-надсмотрщик, которая периодически проверяет состояние
+        всех пользовательских моделей, в зависимости от этого изменяет
+        состояние окружения, выводит информацию, подгружает результаты
+        выполнения работ и др.
+        """
 
         def StateToStr(state):
             if   state == server.JOB_READY:
@@ -90,25 +122,26 @@ class MainFrame(forms.MainFrame):
             cycle_count = 0
             while True:
                 wx.MutexGuiEnter()
-                print 'cycle{:-8}'.format(cycle_count)
+                #print 'cycle{:-8}'.format(cycle_count)
                 cycle_count += 1
-                item = um.GetRootItem()
-                while item.IsOk():
+                # просматриваем всю иерархию моделей
+                for item in um:
                     data = um.GetPyData(item)
-                    if data:
-                        jid = data[1]
-                        if jid != None and self.server.IsJobChanged(jid):
-                            state = self.server.GetJobState(jid)
-                            um.SetItemText(item, StateToStr(state[0]), 1)
-                            p = state[1]
-                            p = 'Unknown' if p < 0 else '{:%}'.format(p)
-                            um.SetItemText(item, p, 2)
-                            um.SetItemText(item, state[2], 3)
-                            print jid, state
+                    if not data:
+                        continue
+                    jid = data.jid
+                    if jid != None and self.server.IsJobChanged(jid):
+                        state, percent, comment = self.server.GetJobState(jid)
+                        um.SetItemText(item, StateToStr(state), 1)
+                        p = 'Unknown' if percent < 0 else '{:%}'.format(percent)
+                        um.SetItemText(item, p, 2)
+                        um.SetItemText(item, comment, 3)
+                        print jid, (state, percent, comment)
+                        if state == server.JOB_COMPLETED:
+                            data.res = self.server.GetJobResult(jid)
 
-                    item = um.GetNext(item)
                 wx.MutexGuiLeave()
-                time.sleep(0.2)
+                time.sleep(0.1)
         except Exception, e:
             print 'Error in overseer: ', e
 
@@ -118,12 +151,10 @@ class MainFrame(forms.MainFrame):
         Возвращает True, если имя уникально, иначе False.
         """
         um = self.m_user_models
-        item = um.GetRootItem()
-        while item.IsOk():
+        for item in um:
             item_name = um.GetItemText(item)
             if item_name == name:
                 return False
-            item = um.GetNext(item)
         return True
 
     def GenerateName(self, name):
@@ -131,7 +162,7 @@ class MainFrame(forms.MainFrame):
         На основе переданного имени генерирует новое имя модели таким образом,
         чтобы оно осталось уникальным в рамках существующей иерархии моделей.
         """
-        m = re.match(r'(.+)\s+\d*', name)
+        m = re.match(r'^(.+)\s+\d*$', name, re.UNICODE)
         basename = m.group(1) if m else name
         while True:
             name = basename + ' ' + str(self.name_id)
@@ -172,13 +203,17 @@ class MainFrame(forms.MainFrame):
         um = self.m_user_models
         item = um.GetRootItem()
         defparent = None
-        for m in ms:
+        root = None
+        for i, m in enumerate(ms):
             name = self.GenerateName(m.GetTitle())
             item = um.AppendItem(item, name)
-            data = task.DataDefinition(m, defparent)
-            defparent = data
-            jid  = self.server.CreateJob() if m.IsExecutable() else None
-            um.SetPyData(item, [data, jid])
+            if not i:
+                root = item
+            data = ModelData(self.server, m, defparent)
+            defparent = data.mdef
+            um.SetPyData(item, data)
+        if root:
+            um.Expand(root)
 
     def NewProject(self, model):
         # 1. загрузить спецификации модели
@@ -194,7 +229,7 @@ class MainFrame(forms.MainFrame):
 
         return True # Project(model)
 
-    def SelectUserModel(self, model_def, jid):
+    def SelectUserModel(self, model_def):
 
         def SelectProperty(param_type):
             """
@@ -220,23 +255,42 @@ class MainFrame(forms.MainFrame):
         msg = model_def.PackParams()
         pg = self.m_params
         pg.ClearPage(0)
-        #pg.Append(wxpg.PropertyCategory('Model properties'))
-        for k, v in model_def.params.iteritems():
-            p = model_def.DD[k]
-            title = p.GetTitle() or k
-            prop = SelectProperty(p.GetType())
-            pid = pg.Append(prop(title, value = v))
-            pg.SetPropertyClientData(pid, k)
-            pg.SetPropertyHelpString(pid, p.GetComment())
+        for label, value in model_def.params.iteritems():
+            param   = model_def.DD[label]
+            title   = param.GetTitle() or label
+            prop    = SelectProperty(param.GetType())
+            pid     = pg.Append(prop(title, value = value))
+            pg.SetPropertyClientData(pid, label)
+            pg.SetPropertyHelpString(pid, param.GetComment())
 
-        pd = model_def.PackParams()
-        self.SetStatusText(pd, 0)
+        self.SetStatusText(model_def.PackParams(), 0)
+
+    def GetSelectedItem(self, source):
+        item = source.GetSelection()
+        if not item.IsOk():
+            raise ItemError('Invalid item')
+        return item
+
+    def GetSelectedData(self, source):
+        item = self.GetSelectedItem(source)
+        data = source.GetPyData(item)
+        if not data:
+            raise ItemError('Empty data')
+        return data
+
+    def GetSelectedItemData(self, source):
+        item = self.GetSelectedItem(source)
+        data = source.GetPyData(item)
+        if not data:
+            raise ItemError('Empty data')
+        return (item, data)
+
 
     def OnModelActivated(self, event):
         item = event.GetItem()
         data = self.m_user_models.GetPyData(item)
         if data:
-            self.SelectUserModel(data[0], data[1])
+            self.SelectUserModel(data.mdef)
 
     def OnParamChanging(self, event):
         #value = event.GetValue()
@@ -251,68 +305,111 @@ class MainFrame(forms.MainFrame):
             return
         value = prop.GetValue()
         param = prop.GetClientData()
-        um = self.m_user_models
-        id = um.GetSelection()
-        data, jid = um.GetItemPyData(id)
-        data[param] = value
+        data  = self.GetSelectedData(self.m_user_models)
+        data.mdef[param] = value
 
     def OnTest(self, event):
         um = self.m_user_models
 
     def OnAddModelToRoot(self, event):
-        item = self.m_specs.GetSelection()
-        if not item.IsOk():
-            return
-        print self.m_specs.GetItemText(item)
-        model = self.m_specs.GetPyData(item)
+        model = self.GetSelectedData(self.m_specs)
         self.AddModelToRoot(model)
 
     def OnAddModelToSelected(self, event):
         """
-        Добавляет пользовательскую спецификацию к указанной модели или в уже
-        существующую иерархию спецификаций.
+        Добавляет пользовательскую спецификацию к указанной модели
         """
-        item = self.m_specs.GetSelection()
-        if not item.IsOk():
-            return
-        model = self.m_specs.GetPyData(item)
-
+        # получаем модель, которая будет добавлена к пользовательским
+        model = self.GetSelectedData(self.m_specs)
+        # получаем пользовательскую модель, к которой хотим присоединить новую
+        item, data = self.GetSelectedItemData(self.m_user_models)
+        pmdef = data.mdef
         um = self.m_user_models
-        item = um.GetSelection()
-        if not item.IsOk():
-            return
-
-        pmdef, _ = um.GetPyData(item)
-
+        # если новая модель может быть присоединена...
         if pmdef.DD == model.parent:
-            modeldef = task.DataDefinition(model, pmdef)
-            name = self.GenerateName(model.GetTitle())
-            item = um.AppendItem(item, name)
-            jid  = self.server.CreateJob() if model.IsExecutable() else None
-            um.SetPyData(item, [modeldef, jid])
+            name     = self.GenerateName(model.GetTitle())
+            child    = um.AppendItem(item, name)
+            new_data = ModelData(self.server, model, pmdef)
+            um.SetPyData(child, new_data)
+            um.Expand(item)
         else:
             wx.MessageBox('It\'s impossible to append model', 'Error')
 
     def OnDuplicate(self, event):
-        um      = self.m_user_models
-        id      = um.GetSelection()
-        title   = um.GetItemText(id)
-        parent  = um.GetItemParent(id)
-        md, jid = um.GetItemPyData(id)
+        """
+        Обработчик события "дублирование модели"
 
-        child   = um.AppendItem(parent, self.GenerateName(title))
-        jid     = self.server.CreateJob()
-        um.SetPyData(child, [md.Copy(), jid])
+        Когда модель дублируется, ее параметры копируются в новую модель,
+        при неоходимости выделяется слот для работ на сервере.
+        Результаты модели-оригинала не копируются.
+        """
+        um = self.m_user_models
+        item, data = self.GetSelectedItemData(self.m_user_models)
+        title    = um.GetItemText(item)
+        parent   = um.GetItemParent(item)
+        child    = um.AppendItem(parent, self.GenerateName(title))
+        new_data = ModelData(self.server, data)
+        um.SetPyData(child, new_data)
         self.SetStatusText('Copy for "{}" created'.format(title), 0)
+
+    def OnDuplicateTree(self, event):
+        pass
+
+    def OnDeleteModel(self, event):
+        item, data = self.GetSelectedItemData(self.m_user_models)
+        self.server.DeleteJob(data.jid)
+        self.m_user_models.Delete(item)
 
     def OnModelProcess(self, event):
         um = self.m_user_models
         for i in um.GetSelections():
-            data, jid = um.GetItemPyData(i)
-            self.server.LaunchJob(jid, data)
+            data = um.GetItemPyData(i)
+            self.server.LaunchJob(data.jid, data.mdef)
+
+    def OnShowResult(self, event):
+        item, data = self.GetSelectedItemData(self.m_user_models)
+        title = self.m_user_models.GetItemText(item)
+        title = 'Result for model "{}"'.format(title)
+        rframe = ResultFrame(self, title, data.res)
+        rframe.Show()
 
     def OnIdle(self, event):
         pass
+
+#-----------------------------------------------------------------------------
+# Форма с результатами выполнения работы
+#-----------------------------------------------------------------------------
+
+class ResultFrame(forms.ResultFrame):
+    def __init__(self, parent, title, result):
+        forms.ResultFrame.__init__(self, parent, title)
+        self.result = result
+        self.UpdateResults()
+
+    def UpdateResults(self):
+        self.scalar.ClearPage(0)
+        self.table.ClearGrid()
+        if self.result:
+            table = self.result.get('table', [])
+            if table and len(table):
+                cols = len(table[0])
+                rows = len(table) - 1
+                self.table.CreateGrid(rows, cols)
+                #
+                for i, col in enumerate(table[0]):
+                    label = "{} ({})".format(col[0], col[1])
+                    self.table.SetColLabelValue(i, label)
+                #
+                for ri, row in enumerate(table[1:]):
+                    for ci, value in enumerate(row):
+                        self.table.SetCellValue(ri, ci, str(value))
+
+                self.table.AutoSize()
+
+            data = self.result.get('data', {})
+            pg = self.scalar
+            for label, value in data.iteritems():
+                pid = pg.Append(wxpg.StringProperty(label, value = str(value)))
 
 #-----------------------------------------------------------------------------
 # Приложение

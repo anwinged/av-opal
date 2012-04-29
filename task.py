@@ -181,3 +181,9 @@ class ResultData:
         return self.table
 
     rows = property(GetRows)
+
+    def GetColumn(self, index):
+        return [ row[index] for row in self.rows ]
+
+    def Zip(self, col1, col2):
+        return [ (row[col1], row[col2]) for row in self.rows ]

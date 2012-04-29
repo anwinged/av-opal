@@ -13,8 +13,13 @@ ID_DUPLICATE_MODEL      = wx.NewId()
 ID_DUPLICATE_TREE       = wx.NewId()
 ID_DELETE_MODEL         = wx.NewId()
 ID_PROCESS_MODEL        = wx.NewId()
+
 ID_SHOW_RESULT          = wx.NewId()
 ID_SHOW_PLOT            = wx.NewId()
+ID_ADD_PLOT             = wx.NewId()
+ID_ADD_LINE             = wx.NewId()
+
+ID_ABOUT                = wx.NewId()
 
 class TreeListCtrl(wx.gizmos.TreeListCtrl):
 
@@ -55,12 +60,13 @@ class MainFrame (wx.Frame):
 
         self.m_user_models = TreeListCtrl(self,
             style = wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT
-                    | wx.TR_EDIT_LABELS | wx.TR_ROW_LINES | wx.TR_MULTIPLE)
+                    | wx.TR_FULL_ROW_HIGHLIGHT | wx.TR_ROW_LINES | wx.TR_MULTIPLE)
         self.m_user_models.SetMinSize(wx.Size(-1, 300))
         self.m_user_models.AddColumn("Model name")
         self.m_user_models.AddColumn("Status")
         self.m_user_models.AddColumn("Progress")
         self.m_user_models.AddColumn("Comment")
+        self.m_user_models.SetMainColumn(0)
 
         bSizer4.Add(self.m_user_models, 0, wx.ALL | wx.EXPAND, 1)
 
@@ -79,6 +85,7 @@ class MainFrame (wx.Frame):
         bSizer5.Add(self.m_quick_result, 1, wx.EXPAND | wx.ALL, 1)
 
         self.m_plots = wx.TreeCtrl(self, style = wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT)
+        self.m_plots.AddRoot('root')
         bSizer5.Add(self.m_plots, 1, wx.EXPAND | wx.ALL, 1)        
 
         bSizer3.Add(bSizer5, 0, wx.ALL | wx.EXPAND, 1)
@@ -90,13 +97,16 @@ class MainFrame (wx.Frame):
         self.SetMenuBar(mbar)
         self.BuildContextMenu()
 
+        #tbar = self.BuildToolBar()
+        #self.SetToolBar(tbar)
+
         self.SetSizer(bSizer3)
         self.Layout()
 
         self.Centre(wx.BOTH)
 
-    def __del__(self):
-        pass
+        il = wx.ImageList(16, 16)
+
 
     def BuildMenu(self):
         menubar = wx.MenuBar()
@@ -106,9 +116,7 @@ class MainFrame (wx.Frame):
         menubar.Append(menu, '&File')
 
         menu = wx.Menu()
-        menu.Append(ID_PROCESS_MODEL, 'Process\tCtrl+R')
-        menu.Append(ID_SHOW_RESULT, 'Show result\tCtrl+S')
-        menu.Append(ID_SHOW_PLOT, 'Show plot\tCtrl+G')
+        menu.Append(ID_PROCESS_MODEL, 'Process\tF5')
         menu.AppendSeparator()
         menu.Append(ID_ADD_MODEL_ROOT, 'Add model to root')
         menu.Append(ID_ADD_MODEL_SELECTED, 'Append model to selected')
@@ -121,8 +129,15 @@ class MainFrame (wx.Frame):
         menubar.Append(menu, '&Model')
 
         menu = wx.Menu()
-        menu.Append(3, "&Log In\tCtrl+L")
-        menu.Append(2, "&Options\tCtrl+P")
+        menu.Append(ID_SHOW_RESULT, 'Show result\tCtrl+S')
+        menu.AppendSeparator()
+        menu.Append(ID_SHOW_PLOT, 'Show plot\tCtrl+G')
+        menu.Append(ID_ADD_PLOT, 'Add plot')
+        menu.Append(ID_ADD_LINE, 'Add line')
+        menubar.Append(menu, '&Result')
+
+        menu = wx.Menu()
+        menu.Append(ID_ABOUT, "&About\tF1")
         menubar.Append(menu, '&Help')
 
         return menubar
@@ -134,6 +149,19 @@ class MainFrame (wx.Frame):
         menu.Append(ID_ADD_MODEL_SELECTED, 'Add model to selected')
         self.m_specs.Bind(wx.EVT_CONTEXT_MENU,
             lambda x: self.m_specs.PopupMenu(menu))
+
+        menu1 = wx.Menu()
+        menu1.Append(ID_ADD_PLOT, 'Add plot')
+        menu1.Append(ID_ADD_LINE, 'Add line')
+        self.m_plots.Bind(wx.EVT_CONTEXT_MENU,
+            lambda x: self.m_plots.PopupMenu(menu1))
+
+
+    def BuildToolBar(self):
+        tbar = wx.ToolBar(self, -1)
+        tbar.AddLabelTool(ID_SHOW_PLOT, 'Show plot', wx.Bitmap('share/show-plot.png'))
+        tbar.Realize()
+        return tbar
 
 class ResultFrame(wx.Frame):
     def __init__(self, parent, title):
@@ -155,8 +183,35 @@ class ResultFrame(wx.Frame):
         self.Layout()
         self.Centre(wx.BOTH)
 
+class LineSelectDialog(wx.Dialog):
+    def __init__(self, parent, title):
+        wx.Dialog.__init__ (self, parent, -1, title, size = wx.Size(400, 300))
+
+        bSizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.left = wx.ListBox(self)
+        self.right = wx.ListBox(self, style = wx.LB_EXTENDED)
+
+        bSizer.Add(self.left, 1, wx.EXPAND | wx.ALL, 2)
+        bSizer.Add(self.right, 1, wx.EXPAND | wx.ALL, 2)
+
+        buttonsSizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(bSizer, 1, wx.EXPAND | wx.ALL, 0)
+        sizer.Add(buttonsSizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        self.SetSizer(sizer)
+        self.Layout()   
+        self.Centre(wx.BOTH)
+
+
 class PlotFrame(wx.Frame):
     def __init__(self, parent, title):
         wx.Frame.__init__ (self, parent, -1, title, size = wx.Size(600, 400))
 
         self.plot = wxplot.PlotCanvas(self)
+        self.plot.SetGridColour(wx.Color(200, 200, 200))
+        self.plot.SetEnableGrid(True)
+        self.plot.SetEnableAntiAliasing(True)
+        self.plot.SetEnableHiRes(True)

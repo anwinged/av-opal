@@ -15,6 +15,7 @@ import server
 import task
 import wx
 import wx.propgrid as wxpg
+import wx.lib.plot as wxplot
 import forms
 import time
 import datetime
@@ -69,6 +70,8 @@ class MainFrame(forms.MainFrame):
             self.OnAddModelToSelected)
         self.m_user_models.Bind(wx.EVT_TREE_ITEM_ACTIVATED,
             self.OnModelProcess)
+        self.m_plots.Bind(wx.EVT_TREE_ITEM_ACTIVATED,
+            self.OnPlotProcess)
 
 
         self.Bind(wx.EVT_MENU, self.OnTest,
@@ -85,11 +88,26 @@ class MainFrame(forms.MainFrame):
             id = forms.ID_DELETE_MODEL)
         self.Bind(wx.EVT_MENU, self.OnModelProcess,
             id = forms.ID_PROCESS_MODEL)
+
         self.Bind(wx.EVT_MENU, self.OnShowResult,
             id = forms.ID_SHOW_RESULT)
+        self.Bind(wx.EVT_MENU, self.OnShowPlot,
+            id = forms.ID_SHOW_PLOT)
+        self.Bind(wx.EVT_MENU, self.OnAddPlot,
+            id = forms.ID_ADD_PLOT)
+        self.Bind(wx.EVT_MENU, self.OnAddLines,
+            id = forms.ID_ADD_LINE)
 
         self.Bind(wx.EVT_CLOSE, self.OnClose)
         self.Bind(wx.EVT_IDLE, self.OnIdle)
+
+        # если установлен в True, то обработчик состояний работ
+        # будет работать вхолостую, чтобы не создать deadlock
+        # проблема возникает в том, что при одновременной блокировке
+        # GUI и вызова модального диалога, последний весит все приложение напрочь
+        # в момент своего закрытия. а так как диалог все равно модальный,
+        # форме не обязательно обновляться в тот момент, когда он открыт
+        self.do_nothing = False
 
         ov = threading.Thread(target = self.Overseer)
         ov.daemon = True
@@ -126,33 +144,40 @@ class MainFrame(forms.MainFrame):
             um = self.m_user_models
             cycle_count = 0
             while True:
-                wx.MutexGuiEnter()
-                #print 'cycle{:-8}'.format(cycle_count)
-                cycle_count += 1
-                # просматриваем всю иерархию моделей
-                for item in um:
-                    data = um.GetPyData(item)
-                    if not data:
-                        continue
-                    jid = data.jid
-                    if jid != None and self.server.IsJobChanged(jid):
-                        state, percent, comment = self.server.GetJobState(jid)
-                        um.SetItemText(item, StateToStr(state), 1)
-                        p = 'Unknown' if percent < 0 else '{:%}'.format(percent)
-                        um.SetItemText(item, p, 2)
-                        um.SetItemText(item, comment, 3)
-                        print 'JID', jid, (state, percent, comment)
-                        # завершающие действия по окончанию выполнения работы
-                        if state == server.JOB_COMPLETED:
-                            # получаем результаты выполнения
-                            data.res = self.server.GetJobResult(jid)
-                            # если завершившаяся задача в данный момент выделена
-                            # то сразу же показываем этот результат
-                            if um.IsSelected(item):
-                                self.ShowQuickResult(data.res)
-
-                wx.MutexGuiLeave()
                 time.sleep(0.1)
+
+                # если нужно подождать, то мы подождем
+                if self.do_nothing:
+                    continue
+
+                wx.MutexGuiEnter()
+                try:
+                    # print 'cycle{:-8}'.format(cycle_count)
+                    cycle_count += 1
+                    # просматриваем всю иерархию моделей
+                    for item in um:
+                        data = um.GetPyData(item)
+                        if not data:
+                            continue
+                        jid = data.jid
+                        if jid != None and self.server.IsJobChanged(jid):
+                            state, percent, comment = self.server.GetJobState(jid)
+                            um.SetItemText(item, StateToStr(state), 1)
+                            p = 'Unknown' if percent < 0 else '{:%}'.format(percent)
+                            um.SetItemText(item, p, 2)
+                            um.SetItemText(item, comment, 3)
+                            print 'JID', jid, (state, percent, comment)
+                            # завершающие действия по окончанию выполнения работы
+                            if state == server.JOB_COMPLETED:
+                                # получаем результаты выполнения
+                                data.res = self.server.GetJobResult(jid)
+                                # если завершившаяся задача в данный момент выделена
+                                # то сразу же показываем этот результат
+                                if um.IsSelected(item):
+                                    self.ShowQuickResult(data.res)
+                finally:
+                    wx.MutexGuiLeave()
+                    pass
         except Exception, e:
             print 'Error in overseer: ', e
 
@@ -227,16 +252,22 @@ class MainFrame(forms.MainFrame):
             um.Expand(root)
 
     def NewProject(self, model):
-        # 1. загрузить спецификации модели
-        # 2. создать одну модель по умолчанию
-
+        """
+        Начать новый проект:
+        1. Построить дерево спецификаций
+        2. Создать одну пользовательскую модель (по умолчанию)
+        3. Сделать заготовки для графиков/отчетов/прочего
+        """
+        # Строим спецификации
         self.BuildSpecs(model)
-
+        # Очищаем окно пользовательских моделей
+        # и создаем там одну
         um = self.m_user_models
         um.DeleteAllItems()
-        um.AddRoot('Root')
-
+        um.AddRoot('root')
         self.AddModelToRoot(model)
+        # Создаем корневой элемент для окна с графиками
+        self.m_plots.AddRoot('root')
 
         return True # Project(model)
 
@@ -394,6 +425,89 @@ class MainFrame(forms.MainFrame):
         rframe = ResultFrame(self, title, data.res)
         rframe.Show()
 
+    def GetLines(self):
+        """
+        Возвращает набор линий, которые пользователь указал для
+        построения графика к выбранной модели.
+
+        Линии представляют из себя кортежи из 4х элементов:
+        [   внутренний индекс в иерархии моделей,
+            данные модели, 
+            колонка-х, 
+            колонка-у   ]
+        """
+        um = self.m_user_models
+        item, data = self.GetSelectedItemData(um)
+        title = um.GetItemText(item)
+        if not data.res:
+            self.SetStatusText("There is no results in model")
+            return []
+        f = LineSelectDialog(self, 'Select lines for "{}"'.format(title))
+        for index, col in enumerate(data.res.columns):
+            row_title = col.GetTitle()
+            row_data  = index
+            f.Add(row_title, row_data)
+        f.SetSelections()
+
+        lines = []
+        self.do_nothing = True
+        try:
+            if f.ShowModal() == wx.ID_OK:
+                lines = [ (item, data, x, y) for x, y in f.GetData() ]
+        finally:
+            self.do_nothing = False
+
+        return lines
+
+    def ShowPlot(self, lines, title = ''):
+        if not lines:
+            return
+
+        data = []
+        for item, moddata, x, y in lines:
+            data.append(moddata.res.Zip(x, y))
+
+        p = PlotFrame(self, 'Plot for model "%s"' % title, data)
+        p.Show()
+
+
+    def OnShowPlot(self, event):
+        lines = self.GetLines()
+        self.ShowPlot(lines)
+
+
+
+    def OnAddPlot(self, event):
+        root = self.m_plots.GetRootItem()
+        child = self.m_plots.AppendItem(root, 'New plot')
+        self.m_plots.SetPyData(child, 'plot')
+
+    def OnAddLines(self, event):
+        item = self.m_plots.GetSelection()
+        data = self.m_plots.GetItemPyData(item)
+        if data != 'plot':
+            return
+        lines = self.GetLines()
+        if not lines:
+            return
+        for line in lines:
+            child = self.m_plots.AppendItem(item, 'Line')
+            self.m_plots.SetPyData(child, line)
+
+    def OnPlotProcess(self, event):
+        item = self.m_plots.GetSelection()
+        data = self.m_plots.GetItemPyData(item)
+        lines = []
+        if data == 'plot':
+            child, cookie = self.m_plots.GetFirstChild(item)
+            while child.IsOk():
+                lines.append(self.m_plots.GetItemPyData(child))
+                child, cookie = self.m_plots.GetNextChild(item, cookie)
+        else:
+            lines = [data]
+
+        self.ShowPlot(lines)
+
     def OnIdle(self, event):
         pass
 
@@ -430,6 +544,52 @@ class ResultFrame(forms.ResultFrame):
         pg = self.scalar
         for label, param in self.result.data.iteritems():
             pg.Append(wxpg.StringProperty(label, value = str(param.GetValue())))
+
+#-----------------------------------------------------------------------------
+# Форма с выбором наборов значений для построения графика
+#-----------------------------------------------------------------------------
+
+class LineSelectDialog(forms.LineSelectDialog):
+    def __init__(self, parent, title):
+        forms.LineSelectDialog.__init__(self, parent, title)
+
+    def Add(self, title, data = None):
+        self.left.Append(title, data)
+        self.right.Append(title, data)
+
+    def SetSelections(self):
+        if self.left.GetCount():
+            self.left.Select(0)
+        for i in xrange(1, self.right.GetCount()):
+            self.right.Select(i)
+
+    def GetData(self):
+        item = self.left.GetSelection()
+        x = self.left.GetClientData(item)
+
+        items = self.right.GetSelections()
+        ys = [ self.right.GetClientData(i) for i in items ]
+
+        return [ (x, y) for y in ys ]
+
+
+#-----------------------------------------------------------------------------
+# Форма с изображением графика
+#-----------------------------------------------------------------------------
+
+class PlotFrame(forms.PlotFrame):
+    def __init__(self, parent, title, lines_with_data):
+        forms.PlotFrame.__init__(self, parent, title)
+        #self.data = data
+        data = lines_with_data
+
+        lines = []
+        colours = ['red', 'blue', 'green']
+        for i, d in enumerate(data):
+            lines.append( wxplot.PolyLine(d, colour = colours[i % len(colours)]) )
+
+        graph = wxplot.PlotGraphics(lines)
+        self.plot.Draw(graph)
 
 #-----------------------------------------------------------------------------
 # Приложение

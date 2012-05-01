@@ -112,11 +112,11 @@ class DataDescription:
     def IsExecutable(self):
         return self.data.get('exec', True)
 
+    def GetImage(self):
+        return self.data.get('img')
+
     def __getitem__(self, label):
         return self.pdata.get(label)
-
-    def type(self):
-        return 'data-def'
 
 #-------------------------------------------------------------------------------
 
@@ -153,9 +153,6 @@ class DataDefinition:
             owner = owner.parent
         package.reverse()
         return json.dumps(package)
-
-    def type(self):
-        return 'data-def'
 
 #-------------------------------------------------------------------------------
 

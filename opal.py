@@ -22,6 +22,7 @@ import datetime
 import os
 import threading
 import re
+from wx.lib.embeddedimage import PyEmbeddedImage
 
 class ModelData:
     def __init__(self, server, model, parent_data = None):
@@ -39,6 +40,30 @@ class ModelData:
 
         self.res  = None
 
+
+LINE_CURVE      = 1
+LINE_MARKER     = 2
+LINE_HISTOGRAM  = 3
+
+class LineData:
+    """
+    Данные одной линии для графика
+
+    Предназначен для использования совместно с графическим компонентом,
+    поэтому не имеет собственного значения названия. Вместо этого
+    название берется из графического компонента.
+    """
+    def __init__(self, type, mdata, columns, colour = None, style = None):
+        self.type       = type      # тип графика
+        self.mdata      = mdata     # указатель на данные модели
+        self.title      = ''
+        self.columns    = columns   # пара (x, y)
+        self.colour     = colour    # цвет: если не задан выбирается из списка
+        self.style      = style     # стиль: если не задан, еспользуется по умолчанию
+
+    def GetPoints(self):
+        return self.mdata.res.Zip(*self.columns)
+
 class ItemError(Exception):
     pass
 
@@ -55,6 +80,7 @@ class MainFrame(forms.MainFrame):
         s = server.LocalServer()
         s.LoadModels()
         models = s.GetModels()
+        self.models = models
         s.Start()
         self.server = s
 
@@ -74,6 +100,9 @@ class MainFrame(forms.MainFrame):
             self.OnPlotProcess)
 
 
+        self.Bind(wx.EVT_MENU, self.OnNewModel,
+            id = forms.ID_NEW)
+
         self.Bind(wx.EVT_MENU, self.OnTest,
             id = forms.ID_TEST)
         self.Bind(wx.EVT_MENU, self.OnAddModelToRoot,
@@ -91,12 +120,15 @@ class MainFrame(forms.MainFrame):
 
         self.Bind(wx.EVT_MENU, self.OnShowResult,
             id = forms.ID_SHOW_RESULT)
-        self.Bind(wx.EVT_MENU, self.OnShowPlot,
+
+        self.Bind(wx.EVT_MENU, self.OnQuickShowPlot,
             id = forms.ID_SHOW_PLOT)
         self.Bind(wx.EVT_MENU, self.OnAddPlot,
             id = forms.ID_ADD_PLOT)
-        self.Bind(wx.EVT_MENU, self.OnAddLines,
-            id = forms.ID_ADD_LINE)
+        self.Bind(wx.EVT_MENU, self.OnAddCurves,
+            id = forms.ID_ADD_CURVES)
+        self.Bind(wx.EVT_MENU, self.OnAddMarkers,
+            id = forms.ID_ADD_MARKERS)
 
         self.Bind(wx.EVT_CLOSE, self.OnClose)
         self.Bind(wx.EVT_IDLE, self.OnIdle)
@@ -169,12 +201,16 @@ class MainFrame(forms.MainFrame):
                             print 'JID', jid, (state, percent, comment)
                             # завершающие действия по окончанию выполнения работы
                             if state == server.JOB_COMPLETED:
+                                # устанавливаем иконку для завершенной модели
+                                um.SetItemImage(item, self.icons.mcomplete)
                                 # получаем результаты выполнения
                                 data.res = self.server.GetJobResult(jid)
                                 # если завершившаяся задача в данный момент выделена
                                 # то сразу же показываем этот результат
                                 if um.IsSelected(item):
                                     self.ShowQuickResult(data.res)
+                            else:
+                                um.SetItemImage(item, self.icons.mrun)
                 finally:
                     wx.MutexGuiLeave()
                     pass
@@ -243,6 +279,7 @@ class MainFrame(forms.MainFrame):
         for i, m in enumerate(ms):
             name = self.GenerateName(m.GetTitle())
             item = um.AppendItem(item, name)
+            um.SetItemImage(item, self.icons.mready)
             if not i:
                 root = item
             data = ModelData(self.server, m, defparent)
@@ -357,11 +394,23 @@ class MainFrame(forms.MainFrame):
             return
         value = prop.GetValue()
         param = prop.GetClientData()
-        data  = self.GetSelectedData(self.m_user_models)
+        item, data = self.GetSelectedItemData(self.m_user_models)
         data.mdef[param] = value
+        self.m_user_models.SetItemImage(item, self.icons.mready)
 
     def OnTest(self, event):
         um = self.m_user_models
+
+    def OnNewModel(self, event):
+        self.do_nothing = True
+        f = SelectModelDialog(self, self.models)
+        if f.ShowModal() == wx.ID_OK:
+            model = f.GetSelectedModel()
+            if model:
+                print model.GetTitle()
+            else:
+                print 'Bad :('
+        self.do_nothing = False
 
     def OnAddModelToRoot(self, event):
         model = self.GetSelectedData(self.m_specs)
@@ -383,6 +432,7 @@ class MainFrame(forms.MainFrame):
             child    = um.AppendItem(item, name)
             new_data = ModelData(self.server, model, pmdef)
             um.SetPyData(child, new_data)
+            um.SetItemImage(child, self.icons.mready)
             um.Expand(item)
         else:
             wx.MessageBox('It\'s impossible to append model', 'Error')
@@ -402,6 +452,7 @@ class MainFrame(forms.MainFrame):
         child    = um.AppendItem(parent, self.GenerateName(title))
         new_data = ModelData(self.server, data)
         um.SetPyData(child, new_data)
+        um.SetItemImage(child, self.icons.mready)
         self.SetStatusText('Copy for "{}" created'.format(title), 0)
 
     def OnDuplicateTree(self, event):
@@ -425,16 +476,12 @@ class MainFrame(forms.MainFrame):
         rframe = ResultFrame(self, title, data.res)
         rframe.Show()
 
-    def GetLines(self):
+    def GetLines(self, line_type):
         """
         Возвращает набор линий, которые пользователь указал для
         построения графика к выбранной модели.
 
-        Линии представляют из себя кортежи из 4х элементов:
-        [   внутренний индекс в иерархии моделей,
-            данные модели, 
-            колонка-х, 
-            колонка-у   ]
+        Возвращает список экземпляров LineData
         """
         um = self.m_user_models
         item, data = self.GetSelectedItemData(um)
@@ -453,46 +500,67 @@ class MainFrame(forms.MainFrame):
         self.do_nothing = True
         try:
             if f.ShowModal() == wx.ID_OK:
-                lines = [ (item, data, x, y) for x, y in f.GetData() ]
+                lines = [ LineData(line_type, data, xy)
+                            for xy in f.GetLineColumns() ]
         finally:
             self.do_nothing = False
 
         return lines
 
-    def ShowPlot(self, lines, title = ''):
-        if not lines:
-            return
+    def ShowPlot(self, lines, plot_title = ''):
+        if lines:
+            p = PlotFrame(self, 'Plot', lines)
+            p.Show()
 
-        data = []
-        for item, moddata, x, y in lines:
-            data.append(moddata.res.Zip(x, y))
-
-        p = PlotFrame(self, 'Plot for model "%s"' % title, data)
-        p.Show()
-
-
-    def OnShowPlot(self, event):
-        lines = self.GetLines()
-        self.ShowPlot(lines)
-
-
+    def OnQuickShowPlot(self, event):
+        lines = self.GetLines(LINE_CURVE)
+        um    = self.m_user_models
+        item, data = self.GetSelectedItemData(um)
+        title = um.GetItemText(item)
+        for line in lines:
+            colx, coly = line.columns
+            title_x = data.res.columns[colx].GetTitle()
+            title_y = data.res.columns[coly].GetTitle()
+            line.title = "{}: {}({})".format(title, title_y, title_x)
+        self.ShowPlot(lines, title)
 
     def OnAddPlot(self, event):
         root = self.m_plots.GetRootItem()
         child = self.m_plots.AppendItem(root, 'New plot')
         self.m_plots.SetPyData(child, 'plot')
+        self.m_plots.SetItemImage(child, self.icons.porg)
+        self.m_plots.SelectItem(child)
 
-    def OnAddLines(self, event):
-        item = self.m_plots.GetSelection()
-        data = self.m_plots.GetItemPyData(item)
+    def AddLines(self, line_type):
+        item, data = self.GetSelectedItemData(self.m_plots)
         if data != 'plot':
             return
-        lines = self.GetLines()
+        lines = self.GetLines(line_type)
         if not lines:
             return
+        it = self.GetSelectedItem(self.m_user_models)
         for line in lines:
-            child = self.m_plots.AppendItem(item, 'Line')
+            x, y = line.columns
+            data = line.mdata
+            model_name = self.m_user_models.GetItemText(it)
+            x_name = data.res.columns[x].GetTitle()
+            y_name = data.res.columns[y].GetTitle()
+            title  = "{}: {}({})".format(model_name, y_name, x_name)
+            child  = self.m_plots.AppendItem(item, title)
             self.m_plots.SetPyData(child, line)
+            self.m_plots.SetItemImage(child, self.icons.pline)
+            self.m_plots.Expand(item)
+            if line.type == LINE_MARKER:
+                self.m_plots.SetItemImage(child, self.icons.pmarker)
+            else:
+                self.m_plots.SetItemImage(child, self.icons.pline)
+
+
+    def OnAddCurves(self, event):
+        self.AddLines(LINE_CURVE)
+
+    def OnAddMarkers(self, event):
+        self.AddLines(LINE_MARKER)
 
     def OnPlotProcess(self, event):
         item = self.m_plots.GetSelection()
@@ -501,15 +569,49 @@ class MainFrame(forms.MainFrame):
         if data == 'plot':
             child, cookie = self.m_plots.GetFirstChild(item)
             while child.IsOk():
-                lines.append(self.m_plots.GetItemPyData(child))
+                title = self.m_plots.GetItemText(child)
+                line_data = self.m_plots.GetItemPyData(child)
+                line_data.title = title
+                lines.append(line_data)
                 child, cookie = self.m_plots.GetNextChild(item, cookie)
         else:
-            lines = [data]
+            title = self.m_plots.GetItemText(item)
+            data.title = title
+            lines = [ data ] 
 
         self.ShowPlot(lines)
 
     def OnIdle(self, event):
         pass
+
+#-----------------------------------------------------------------------------
+# Форма с выбором модели из представленного списка
+#-----------------------------------------------------------------------------
+
+class SelectModelDialog(forms.SelectModelDialog):
+    def __init__(self, parent, models):
+        forms.SelectModelDialog.__init__(self, parent)
+
+        self.ilist = wx.ImageList(32, 32)
+        self.mlist.SetImageList(self.ilist, wx.IMAGE_LIST_NORMAL)
+        self.data_list = {}
+
+        for model in models:
+            item = wx.ListItem()
+            item.SetText(model.GetTitle())
+            #item.Data = model
+            img_data = model.GetImage()
+            if img_data:
+                img = PyEmbeddedImage(img_data)
+                index = self.ilist.Add(img.GetBitmap())
+                item.SetImage(index)
+            index = self.mlist.InsertItem(item)
+            self.data_list[index] = model
+
+    def GetSelectedModel(self):
+        index = self.mlist.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
+        return self.data_list.get(index)
+
 
 #-----------------------------------------------------------------------------
 # Форма с результатами выполнения работы
@@ -542,8 +644,13 @@ class ResultFrame(forms.ResultFrame):
         self.table.AutoSize()
 
         pg = self.scalar
-        for label, param in self.result.data.iteritems():
-            pg.Append(wxpg.StringProperty(label, value = str(param.GetValue())))
+        data = self.result.data
+        if not data:
+            pg.Show(0)
+        else:
+            for label, param in data.iteritems():
+                pg.Append(wxpg.StringProperty(label, 
+                    value = str(param.GetValue())))
 
 #-----------------------------------------------------------------------------
 # Форма с выбором наборов значений для построения графика
@@ -553,17 +660,32 @@ class LineSelectDialog(forms.LineSelectDialog):
     def __init__(self, parent, title):
         forms.LineSelectDialog.__init__(self, parent, title)
 
-    def Add(self, title, data = None):
+    def Add(self, title, data):
         self.left.Append(title, data)
         self.right.Append(title, data)
 
     def SetSelections(self):
+        """
+        Выделяет первую строку в левом столбце колонок
+        и все, кроме первой, во втором.
+
+        Таким образом по умолчанию предлагается построить зависимость
+        каждого значения от первого. Это логично, поскольку первым
+        обычно идет независимый параметр.
+        """
+        # выделяем первую строку слева
+        # (первый столбец результата)
         if self.left.GetCount():
             self.left.Select(0)
+        # выделяем все, кроме первой, строки справа
+        # (второй столбец результата)
         for i in xrange(1, self.right.GetCount()):
             self.right.Select(i)
 
-    def GetData(self):
+    def GetLineColumns(self):
+        """
+        Возвращает список пар колонок, которые были выбраны
+        """
         item = self.left.GetSelection()
         x = self.left.GetClientData(item)
 
@@ -578,17 +700,24 @@ class LineSelectDialog(forms.LineSelectDialog):
 #-----------------------------------------------------------------------------
 
 class PlotFrame(forms.PlotFrame):
-    def __init__(self, parent, title, lines_with_data):
+    def __init__(self, parent, title, lines):
         forms.PlotFrame.__init__(self, parent, title)
-        #self.data = data
-        data = lines_with_data
 
-        lines = []
         colours = ['red', 'blue', 'green']
-        for i, d in enumerate(data):
-            lines.append( wxplot.PolyLine(d, colour = colours[i % len(colours)]) )
+        plot_lines = []
+        for i, line in enumerate(lines):
+            attr = {}
+            if line.type == LINE_MARKER:
+                handle = wxplot.PolyMarker
+                attr['size'] = 1
+            else:
+                handle = wxplot.PolyLine
+            points = line.GetPoints()
+            attr['colour'] = line.colour or colours[i % len(colours)]
+            attr['legend'] = line.title or 'Unknown line'
+            plot_lines.append(handle(points, **attr))
 
-        graph = wxplot.PlotGraphics(lines)
+        graph = wxplot.PlotGraphics(plot_lines)
         self.plot.Draw(graph)
 
 #-----------------------------------------------------------------------------

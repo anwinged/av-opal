@@ -79,12 +79,11 @@ class MainFrame(forms.MainFrame):
 
         s = server.LocalServer()
         s.LoadModels()
-        models = s.GetModels()
-        self.models = models
+        self.models = s.GetModels()
         s.Start()
         self.server = s
 
-        model = models[0]
+        # События компонентов
 
         self.m_user_models.Bind(wx.EVT_TREE_SEL_CHANGED,
             self.OnModelActivated)
@@ -100,7 +99,9 @@ class MainFrame(forms.MainFrame):
             self.OnPlotProcess)
 
 
-        self.Bind(wx.EVT_MENU, self.OnNewModel,
+        # События меню
+
+        self.Bind(wx.EVT_MENU, self.OnNewProject,
             id = forms.ID_NEW)
 
         self.Bind(wx.EVT_MENU, self.OnTest,
@@ -130,6 +131,8 @@ class MainFrame(forms.MainFrame):
         self.Bind(wx.EVT_MENU, self.OnAddMarkers,
             id = forms.ID_ADD_MARKERS)
 
+        # События приложения
+
         self.Bind(wx.EVT_CLOSE, self.OnClose)
         self.Bind(wx.EVT_IDLE, self.OnIdle)
 
@@ -145,12 +148,16 @@ class MainFrame(forms.MainFrame):
         ov.daemon = True
         ov.start()
 
-        self.NewProject(model)
+        self.NewProject(self.models[0])
 
+    # Функции приложения и обработки сервера
 
     def OnClose(self, event):
         self.server.Stop()
         self.Destroy()
+
+    def OnIdle(self, event):
+        pass
 
     def Overseer(self):
         """
@@ -217,6 +224,67 @@ class MainFrame(forms.MainFrame):
         except Exception, e:
             print 'Error in overseer: ', e
 
+    # Функции создания модели, сохранения и загрузки
+
+    def BuildSpecs(self, model):
+        """
+        Выстраивает иерархию спецификаций для выбранной модели
+        """
+        def DoItem(item, model):
+            sp.SetPyData(item, model)
+            for spec in model.GetSpecs():
+                child = sp.AppendItem(item, spec.GetTitle())
+                DoItem(child, spec)
+
+        sp = self.m_specs
+        sp.DeleteAllItems()
+        root = sp.AddRoot(model.GetTitle())
+        DoItem(root, model)
+        sp.ExpandAll()
+        sp.SortChildren(root)
+
+    def NewProject(self, model):
+        """
+        Начать новый проект:
+        0. Очичтить все компоненты
+        1. Построить дерево спецификаций
+        2. Создать одну пользовательскую модель (по умолчанию)
+        3. Сделать заготовки для графиков/отчетов/прочего
+        """
+        self.m_specs.DeleteAllItems()
+        self.m_user_models.DeleteAllItems()
+        self.m_params.ClearPage(0)
+        self.m_quick_result.ClearPage(0)
+        self.m_plots.DeleteAllItems()
+        # Строим спецификации
+        self.BuildSpecs(model)
+        # Очищаем окно пользовательских моделей
+        # и создаем там одну
+        um = self.m_user_models
+        um.DeleteAllItems()
+        um.AddRoot('root')
+        self.AddModelToRoot(model)
+        # Создаем корневой элемент для окна с графиками
+        self.m_plots.AddRoot('root')
+
+        self.SetStatusText('Model "{}" selected'.format(model.GetTitle()), 0)
+
+        return True # Project(model)
+
+    def OnNewProject(self, event):
+        self.do_nothing = True
+        f = SelectModelDialog(self, self.models)
+        if f.ShowModal() == wx.ID_OK:
+            model = f.GetSelectedModel()
+            if model:
+                self.NewProject(model)
+        self.do_nothing = False
+
+    # Функции непосредственной работы с моделями:
+    # создание, изменение, дублирование и прочее
+
+    # Работа с именами моделей
+
     def CheckName(self, name):
         """
         Проверяет имя на уникальность в иерархии пользовательских моделей.
@@ -242,22 +310,7 @@ class MainFrame(forms.MainFrame):
                 return name
             self.name_id += 1
 
-    def BuildSpecs(self, model):
-        """
-        Выстраивает иерархию спецификаций для выбранной модели
-        """
-        def DoItem(item, model):
-            sp.SetPyData(item, model)
-            for spec in model.GetSpecs():
-                child = sp.AppendItem(item, spec.GetTitle())
-                DoItem(child, spec)
-
-        sp = self.m_specs
-        sp.DeleteAllItems()
-        root = sp.AddRoot(model.GetTitle())
-        DoItem(root, model)
-        sp.ExpandAll()
-        sp.SortChildren(root)
+    # Добавление новых моделей
 
     def AddModelToRoot(self, model):
         """
@@ -288,130 +341,6 @@ class MainFrame(forms.MainFrame):
         if root:
             um.Expand(root)
 
-    def NewProject(self, model):
-        """
-        Начать новый проект:
-        1. Построить дерево спецификаций
-        2. Создать одну пользовательскую модель (по умолчанию)
-        3. Сделать заготовки для графиков/отчетов/прочего
-        """
-        # Строим спецификации
-        self.BuildSpecs(model)
-        # Очищаем окно пользовательских моделей
-        # и создаем там одну
-        um = self.m_user_models
-        um.DeleteAllItems()
-        um.AddRoot('root')
-        self.AddModelToRoot(model)
-        # Создаем корневой элемент для окна с графиками
-        self.m_plots.AddRoot('root')
-
-        return True # Project(model)
-
-    def SelectUserModel(self, model_def):
-
-        def SelectProperty(param_type):
-            """
-            По указанному имени типа возвращает "свойство" для списка "свойств"
-
-            Смотри руководство пользователя для того, чтобы получить полную
-            информацию о всех типах данных, используемых в Opal.
-            """
-            if   param_type == 'bool' or param_type == 'boolean':
-                return wxpg.BoolProperty
-            elif param_type == 'int':
-                return wxpg.IntProperty
-            elif param_type == 'float' or param_type == 'double':
-                return wxpg.FloatProperty
-            elif param_type == 'str' or param_type == 'string':
-                return wxpg.StringProperty
-            elif param_type == 'list':
-                return wxpg.ArrayStringProperty
-            else:
-                # очень плохо, если это произошло
-                raise KeyError()
-
-        msg = model_def.PackParams()
-        pg = self.m_params
-        pg.ClearPage(0)
-        for label, value in model_def.params.iteritems():
-            param   = model_def.DD[label]
-            title   = param.GetTitle()
-            prop    = SelectProperty(param.GetType())
-            pid     = pg.Append(prop(title, value = value))
-            pg.SetPropertyClientData(pid, label)
-            pg.SetPropertyHelpString(pid, param.GetComment())
-
-        self.SetStatusText(model_def.PackParams(), 0)
-
-    def ShowQuickResult(self, result):
-        if not result:
-            return
-        pg = self.m_quick_result
-        pg.ClearPage(0)
-        for label, param in result.data.iteritems():
-            pg.Append(wxpg.StringProperty(label, value = str(param.GetValue())))
-        pg.SetSplitterLeft()
-
-    def GetSelectedItem(self, source):
-        item = source.GetSelection()
-        if not item.IsOk():
-            raise ItemError('Invalid item')
-        return item
-
-    def GetSelectedData(self, source):
-        item = self.GetSelectedItem(source)
-        data = source.GetPyData(item)
-        if not data:
-            raise ItemError('Empty data')
-        return data
-
-    def GetSelectedItemData(self, source):
-        item = self.GetSelectedItem(source)
-        data = source.GetPyData(item)
-        if not data:
-            raise ItemError('Empty data')
-        return (item, data)
-
-
-    def OnModelActivated(self, event):
-        item = event.GetItem()
-        data = self.m_user_models.GetPyData(item)
-        if data:
-            self.SelectUserModel(data.mdef)
-            self.ShowQuickResult(data.res)
-
-    def OnParamChanging(self, event):
-        #value = event.GetValue()
-        #print repr(value)
-        #wx.MessageBox(value, 'changing')
-        #event.Veto()
-        pass
-
-    def OnParamChanged(self, event):
-        prop = event.GetProperty()
-        if not prop:
-            return
-        value = prop.GetValue()
-        param = prop.GetClientData()
-        item, data = self.GetSelectedItemData(self.m_user_models)
-        data.mdef[param] = value
-        self.m_user_models.SetItemImage(item, self.icons.mready)
-
-    def OnTest(self, event):
-        um = self.m_user_models
-
-    def OnNewModel(self, event):
-        self.do_nothing = True
-        f = SelectModelDialog(self, self.models)
-        if f.ShowModal() == wx.ID_OK:
-            model = f.GetSelectedModel()
-            if model:
-                print model.GetTitle()
-            else:
-                print 'Bad :('
-        self.do_nothing = False
-
     def OnAddModelToRoot(self, event):
         model = self.GetSelectedData(self.m_specs)
         self.AddModelToRoot(model)
@@ -437,6 +366,103 @@ class MainFrame(forms.MainFrame):
         else:
             wx.MessageBox('It\'s impossible to append model', 'Error')
 
+    # Реакция на выбор модели
+
+    def SelectUserModel(self, model_def):
+
+        def SelectProperty(param_type):
+            """
+            По указанному имени типа возвращает "свойство" для списка "свойств"
+
+            Смотри руководство пользователя для того, чтобы получить полную
+            информацию о всех типах данных, используемых в Opal.
+            """
+            if   param_type == 'bool' or param_type == 'boolean':
+                return wxpg.BoolProperty
+            elif param_type == 'int':
+                return wxpg.IntProperty
+            elif param_type == 'float' or param_type == 'double':
+                return wxpg.FloatProperty
+            elif param_type == 'str' or param_type == 'string':
+                return wxpg.StringProperty
+            elif param_type == 'list':
+                return wxpg.ArrayStringProperty
+            else:
+                # очень плохо, если это произошло
+                raise KeyError()
+
+        pg = self.m_params
+        pg.ClearPage(0)
+        for label, value in model_def.params.iteritems():
+            param   = model_def.DD[label]
+            title   = param.GetTitle()
+            prop    = SelectProperty(param.GetType())
+            pid     = pg.Append(prop(title, value = value))
+            pg.SetPropertyClientData(pid, label)
+            pg.SetPropertyHelpString(pid, param.GetComment())
+
+    def ShowQuickResult(self, result):
+        if not result:
+            return
+        pg = self.m_quick_result
+        pg.ClearPage(0)
+        for label, param in result.data.iteritems():
+            pg.Append(wxpg.StringProperty(label, value = str(param.GetValue())))
+        pg.SetSplitterLeft()
+
+    def OnModelActivated(self, event):
+        item = event.GetItem()
+        data = self.m_user_models.GetPyData(item)
+        if data:
+            self.SelectUserModel(data.mdef)
+            self.ShowQuickResult(data.res)
+
+    # Изменение параметров модели
+
+    def OnParamChanging(self, event):
+        #value = event.GetValue()
+        #print repr(value)
+        #wx.MessageBox(value, 'changing')
+        #event.Veto()
+        pass
+
+    def OnParamChanged(self, event):
+        prop = event.GetProperty()
+        if not prop:
+            return
+        value = prop.GetValue()
+        param = prop.GetClientData()
+        item, data = self.GetSelectedItemData(self.m_user_models)
+        data.mdef[param] = value
+        self.m_user_models.SetItemImage(item, self.icons.mready)
+
+    def OnTest(self, event):
+        um = self.m_user_models
+
+    # Получение данных выбранной модели
+
+    def GetSelectedItem(self, source):
+        item = source.GetSelection()
+        if not item.IsOk():
+            raise ItemError('Invalid item')
+        return item
+
+    def GetSelectedData(self, source):
+        item = self.GetSelectedItem(source)
+        data = source.GetPyData(item)
+        if not data:
+            raise ItemError('Empty data')
+        return data
+
+    def GetSelectedItemData(self, source):
+        item = self.GetSelectedItem(source)
+        data = source.GetPyData(item)
+        if not data:
+            raise ItemError('Empty data')
+        return (item, data)
+
+    # Дублирование модели
+
     def OnDuplicate(self, event):
         """
         Обработчик события "дублирование модели"
@@ -458,10 +484,14 @@ class MainFrame(forms.MainFrame):
     def OnDuplicateTree(self, event):
         pass
 
+    # Удаление модели
+
     def OnDeleteModel(self, event):
         item, data = self.GetSelectedItemData(self.m_user_models)
         self.server.DeleteJob(data.jid)
         self.m_user_models.Delete(item)
+
+    # Функции запуска модели на выполнение и управления очередью
 
     def OnModelProcess(self, event):
         um = self.m_user_models
@@ -469,12 +499,23 @@ class MainFrame(forms.MainFrame):
             data = um.GetItemPyData(i)
             self.server.LaunchJob(data.jid, data.mdef)
 
+    # Функции управления таблицами и отчетами
+
     def OnShowResult(self, event):
         item, data = self.GetSelectedItemData(self.m_user_models)
         title = self.m_user_models.GetItemText(item)
         title = 'Result for model "{}"'.format(title)
         rframe = ResultFrame(self, title, data.res)
         rframe.Show()
+
+    # Функции управления графиками
+
+    def OnAddPlot(self, event):
+        root = self.m_plots.GetRootItem()
+        child = self.m_plots.AppendItem(root, 'New plot')
+        self.m_plots.SetPyData(child, 'plot')
+        self.m_plots.SetItemImage(child, self.icons.porg)
+        self.m_plots.SelectItem(child)
 
     def GetLines(self, line_type):
         """
@@ -507,30 +548,6 @@ class MainFrame(forms.MainFrame):
 
         return lines
 
-    def ShowPlot(self, lines, plot_title = ''):
-        if lines:
-            p = PlotFrame(self, 'Plot', lines)
-            p.Show()
-
-    def OnQuickShowPlot(self, event):
-        lines = self.GetLines(LINE_CURVE)
-        um    = self.m_user_models
-        item, data = self.GetSelectedItemData(um)
-        title = um.GetItemText(item)
-        for line in lines:
-            colx, coly = line.columns
-            title_x = data.res.columns[colx].GetTitle()
-            title_y = data.res.columns[coly].GetTitle()
-            line.title = "{}: {}({})".format(title, title_y, title_x)
-        self.ShowPlot(lines, title)
-
-    def OnAddPlot(self, event):
-        root = self.m_plots.GetRootItem()
-        child = self.m_plots.AppendItem(root, 'New plot')
-        self.m_plots.SetPyData(child, 'plot')
-        self.m_plots.SetItemImage(child, self.icons.porg)
-        self.m_plots.SelectItem(child)
-
     def AddLines(self, line_type):
         item, data = self.GetSelectedItemData(self.m_plots)
         if data != 'plot':
@@ -555,12 +572,27 @@ class MainFrame(forms.MainFrame):
             else:
                 self.m_plots.SetItemImage(child, self.icons.pline)
 
-
     def OnAddCurves(self, event):
         self.AddLines(LINE_CURVE)
 
     def OnAddMarkers(self, event):
         self.AddLines(LINE_MARKER)
+
+    def ShowPlot(self, lines, plot_title = ''):
+        p = PlotFrame(self, 'Plot', lines)
+        p.Show()
+
+    def OnQuickShowPlot(self, event):
+        lines = self.GetLines(LINE_CURVE)
+        um    = self.m_user_models
+        item, data = self.GetSelectedItemData(um)
+        title = um.GetItemText(item)
+        for line in lines:
+            colx, coly = line.columns
+            title_x = data.res.columns[colx].GetTitle()
+            title_y = data.res.columns[coly].GetTitle()
+            line.title = "{}: {}({})".format(title, title_y, title_x)
+        self.ShowPlot(lines, title)
 
     def OnPlotProcess(self, event):
         item = self.m_plots.GetSelection()
@@ -580,9 +612,6 @@ class MainFrame(forms.MainFrame):
             lines = [ data ] 
 
         self.ShowPlot(lines)
-
-    def OnIdle(self, event):
-        pass
 
 #-----------------------------------------------------------------------------
 # Форма с выбором модели из представленного списка

@@ -120,7 +120,6 @@ class MainFrame (wx.Frame):
         self.Layout()
         self.Centre(wx.BOTH)
 
-
     def LoadIcons(self):
         icons = Icons()
         ilist = wx.ImageList(16, 16)
@@ -143,7 +142,7 @@ class MainFrame (wx.Frame):
         menu.Append(ID_NEW, "&New\tCtrl+N")
         menu.Append(ID_OPEN, "&Open\tCtrl+O")
         menu.Append(ID_SAVE, "&Save\tCtrl+S")
-        menubar.Append(menu, '&Model')
+        menubar.Append(menu, '&Project')
 
         menu = wx.Menu()
         menu.Append(ID_ADD_MODEL_ROOT, 'Add model to root')
@@ -154,7 +153,7 @@ class MainFrame (wx.Frame):
         menu.Append(ID_DELETE_MODEL, 'Delete\tCtrl+E')
         menu.AppendSeparator()
         menu.Append(ID_TEST, "&Test\tCtrl+T")
-        menubar.Append(menu, '&Edit')
+        menubar.Append(menu, '&Model')
 
         menu = wx.Menu()
         menu.Append(ID_PROCESS_MODEL, 'Process\tF5')
@@ -252,7 +251,6 @@ class LineSelectDialog(wx.Dialog):
         self.SetSizer(sizer)
         self.Layout()   
         self.Centre(wx.BOTH)
-
 
 class PlotFrame(wx.Frame):
     def __init__(self, parent, title):

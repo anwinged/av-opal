@@ -40,7 +40,6 @@ class ModelData:
 
         self.res  = None
 
-
 LINE_CURVE      = 1
 LINE_MARKER     = 2
 LINE_HISTOGRAM  = 3
@@ -87,6 +86,8 @@ class MainFrame(forms.MainFrame):
 
         self.m_user_models.Bind(wx.EVT_TREE_SEL_CHANGED,
             self.OnModelActivated)
+        self.m_user_models.Bind(wx.EVT_TREE_DELETE_ITEM,
+            self.OnDeleteModelsItem)
         self.m_params.Bind(wxpg.EVT_PG_CHANGING,
             self.OnParamChanging)
         self.m_params.Bind(wxpg.EVT_PG_CHANGED,
@@ -97,7 +98,8 @@ class MainFrame(forms.MainFrame):
             self.OnModelProcess)
         self.m_plots.Bind(wx.EVT_TREE_ITEM_ACTIVATED,
             self.OnPlotProcess)
-
+        self.m_plots.Bind(wx.EVT_CHAR,
+            self.OnPlotsKeyPressed)
 
         # События меню
 
@@ -253,8 +255,8 @@ class MainFrame(forms.MainFrame):
         """
         self.m_specs.DeleteAllItems()
         self.m_user_models.DeleteAllItems()
-        self.m_params.ClearPage(0)
-        self.m_quick_result.ClearPage(0)
+        self.m_params.Clear()
+        self.m_quick_result.Clear()
         self.m_plots.DeleteAllItems()
         # Строим спецификации
         self.BuildSpecs(model)
@@ -392,7 +394,7 @@ class MainFrame(forms.MainFrame):
                 raise KeyError()
 
         pg = self.m_params
-        pg.ClearPage(0)
+        pg.Clear()
         for label, value in model_def.params.iteritems():
             param   = model_def.DD[label]
             title   = param.GetTitle()
@@ -405,7 +407,7 @@ class MainFrame(forms.MainFrame):
         if not result:
             return
         pg = self.m_quick_result
-        pg.ClearPage(0)
+        pg.Clear()
         for label, param in result.data.iteritems():
             pg.Append(wxpg.StringProperty(label, value = str(param.GetValue())))
         pg.SetSplitterLeft()
@@ -486,9 +488,14 @@ class MainFrame(forms.MainFrame):
 
     # Удаление модели
 
+    def OnDeleteModelsItem(self, event):
+        item = event.GetItem()
+        data = self.m_user_models.GetPyData(item)
+        if data:
+            self.server.DeleteJob(data.jid)
+
     def OnDeleteModel(self, event):
-        item, data = self.GetSelectedItemData(self.m_user_models)
-        self.server.DeleteJob(data.jid)
+        item = self.GetSelectedItem(self.m_user_models)
         self.m_user_models.Delete(item)
 
     # Функции запуска модели на выполнение и управления очередью
@@ -528,7 +535,7 @@ class MainFrame(forms.MainFrame):
         item, data = self.GetSelectedItemData(um)
         title = um.GetItemText(item)
         if not data.res:
-            self.SetStatusText("There is no results in model")
+            wx.MessageBox('There is no any result data', 'Warning', wx.OK | wx.ICON_EXCLAMATION)
             return []
         f = LineSelectDialog(self, 'Select lines for "{}"'.format(title))
         for index, col in enumerate(data.res.columns):
@@ -579,8 +586,9 @@ class MainFrame(forms.MainFrame):
         self.AddLines(LINE_MARKER)
 
     def ShowPlot(self, lines, plot_title = ''):
-        p = PlotFrame(self, 'Plot', lines)
-        p.Show()
+        if lines:
+            p = PlotFrame(self, 'Plot', lines)
+            p.Show()
 
     def OnQuickShowPlot(self, event):
         lines = self.GetLines(LINE_CURVE)
@@ -612,6 +620,13 @@ class MainFrame(forms.MainFrame):
             lines = [ data ] 
 
         self.ShowPlot(lines)
+
+    def OnPlotsKeyPressed(self, event):
+        keycode = event.GetKeyCode()
+        item = self.GetSelectedItem(self.m_plots)
+        if keycode == wx.WXK_DELETE:
+            self.m_plots.Delete(item)
+        event.Skip()
 
 #-----------------------------------------------------------------------------
 # Форма с выбором модели из представленного списка
@@ -653,7 +668,7 @@ class ResultFrame(forms.ResultFrame):
         self.UpdateResults()
 
     def UpdateResults(self):
-        self.scalar.ClearPage(0)
+        self.scalar.Clear()
         self.table.ClearGrid()
         if not self.result:
             return
@@ -680,6 +695,9 @@ class ResultFrame(forms.ResultFrame):
             for label, param in data.iteritems():
                 pg.Append(wxpg.StringProperty(label, 
                     value = str(param.GetValue())))
+
+    def OnExportToCSV(self, event):
+        pass
 
 #-----------------------------------------------------------------------------
 # Форма с выбором наборов значений для построения графика
@@ -722,7 +740,6 @@ class LineSelectDialog(forms.LineSelectDialog):
         ys = [ self.right.GetClientData(i) for i in items ]
 
         return [ (x, y) for y in ys ]
-
 
 #-----------------------------------------------------------------------------
 # Форма с изображением графика

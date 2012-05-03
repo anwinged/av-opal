@@ -232,7 +232,6 @@ class Worker(threading.Thread):
         else:
             job.Finish(JOB_COMPLETED, 1.0)
 
-
     def ProcessMessage(self, job, msg):
         try:
             # разбираем полученный ответ

@@ -5,6 +5,8 @@ import wx.gizmos
 import wx.grid
 import wx.propgrid as wxpg
 import wx.lib.plot as wxplot
+import wx.lib.agw.aui as aui
+# import wx.aui as aui
 
 ID_NEW                  = wx.NewId()
 ID_SAVE                 = wx.NewId()
@@ -55,27 +57,40 @@ class Icons:
     """
     pass
 
-class MainFrame (wx.Frame):
+class PropertyCtrl(wxpg.PropertyGrid):
+
+    def GetPosition(self):
+        return self.GetPanel().GetPosition()
+
+    def Clear(self):
+        wxpg.PropertyGrid.Clear(self)
+
+class MainFrame(wx.Frame):
     def __init__(self, parent):
         wx.Frame.__init__ (self, parent, title = 'Opal', size = wx.Size(873,594))
+
+        self.auimgr = aui.AuiManager()
+        self.auimgr.SetManagedWindow(self)
+        self.auimgr.GetArtProvider().SetMetric(aui.AUI_DOCKART_SASH_SIZE, 3)
 
         self.SetSizeHintsSz(wx.DefaultSize, wx.DefaultSize)
 
         self.ilist, self.icons = self.LoadIcons()
 
-        bSizer3 = wx.BoxSizer(wx.HORIZONTAL)
+        # Спецификации
 
-        self.m_specs = wx.TreeCtrl(self, style = wx.TR_DEFAULT_STYLE)
-        self.m_specs.SetMinSize(wx.Size(200,-1))
+        self.m_specs = wx.TreeCtrl(self, size = (200, -1), style = wx.TR_DEFAULT_STYLE)
+        # self.m_specs.SetMinSize(wx.Size(200,-1))
 
-        bSizer3.Add(self.m_specs, 0, wx.ALL|wx.EXPAND, 1)
+        self.auimgr.AddPane(self.m_specs,
+            aui.AuiPaneInfo().Name("m_specs").Caption("Templates").
+            Left().Layer(1).CloseButton(False))
 
-        bSizer4 = wx.BoxSizer(wx.VERTICAL)
+        # Пользовательские модели
 
-        self.m_user_models = TreeListCtrl(self,
+        self.m_user_models = TreeListCtrl(self, size = (200, -1),
             style = wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT
                     | wx.TR_FULL_ROW_HIGHLIGHT | wx.TR_ROW_LINES | wx.TR_MULTIPLE)
-        self.m_user_models.SetMinSize(wx.Size(-1, 300))
         self.m_user_models.AddColumn("Model name")
         self.m_user_models.AddColumn("Status")
         self.m_user_models.AddColumn("Progress")
@@ -83,42 +98,49 @@ class MainFrame (wx.Frame):
         self.m_user_models.SetMainColumn(0)
         self.m_user_models.SetImageList(self.ilist)
 
-        bSizer4.Add(self.m_user_models, 0, wx.ALL | wx.EXPAND, 1)
+        self.auimgr.AddPane(self.m_user_models,
+            aui.AuiPaneInfo().Name("m_user_models").Caption("Models").
+            CenterPane().Position(1))
 
-        # WARNING: wxPython code generation isn't supported for this widget yet.
-        self.m_params = wxpg.PropertyGridManager(self)
-        self.m_params.AddPage('fp')
-        bSizer4.Add(self.m_params, 1, wx.EXPAND | wx.ALL, 1)
+        # Параметры модели
 
-        bSizer3.Add(bSizer4, 1, wx.EXPAND, 5)
+        self.m_params = PropertyCtrl(self, size = (-1, 300))
 
-        bSizer5 = wx.BoxSizer(wx.VERTICAL)
+        self.auimgr.AddPane(self.m_params,
+            aui.AuiPaneInfo().Name("m_params").Caption("Parameters").CloseButton(False).
+            CenterPane().Bottom().Position(2))
 
-        self.m_quick_result = wxpg.PropertyGridManager(self)
-        self.m_quick_result.AddPage('fp')
-        self.m_quick_result.SetMinSize(wx.Size(200, -1))
-        bSizer5.Add(self.m_quick_result, 1, wx.EXPAND | wx.ALL, 1)
+        # Быстрые результаты
 
-        self.m_plots = wx.TreeCtrl(self, 
+        self.m_quick_result = PropertyCtrl(self, size = (200, -1))
+
+        self.auimgr.AddPane(self.m_quick_result,
+            aui.AuiPaneInfo().Name("m_quick_result").Caption("Quick results").CloseButton(False).
+            Right().Position(1).Layer(1))
+
+        # Графики
+
+        self.m_plots = wx.TreeCtrl(self, size = (200, -1),
             style = wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT | wx.TR_EDIT_LABELS)
-        bSizer5.Add(self.m_plots, 1, wx.EXPAND | wx.ALL, 1)
         self.m_plots.SetImageList(self.ilist)
 
-        bSizer3.Add(bSizer5, 0, wx.ALL | wx.EXPAND, 1)
+        self.auimgr.AddPane(self.m_plots,
+            aui.AuiPaneInfo().Name("m_plots").Caption("Plots").CloseButton(False).
+            Right().Position(2).Layer(1))
+
+        # Меню, панель инструментов и панель статуса
 
         sbar = wx.StatusBar(self)
         self.SetStatusBar(sbar)
 
-        mbar = self.BuildMenu()
-        self.SetMenuBar(mbar)
+        self.SetMenuBar(self.BuildMenu())
+
         self.BuildContextMenu()
 
         # tbar = self.BuildToolBar()
         # self.SetToolBar(tbar)
 
-        self.SetSizer(bSizer3)
-        self.Layout()
-        self.Centre(wx.BOTH)
+        self.auimgr.Update()
 
     def LoadIcons(self):
         icons = Icons()
@@ -217,8 +239,8 @@ class ResultFrame(wx.Frame):
 
         sizer = wx.BoxSizer(wx.VERTICAL)
 
-        self.scalar = wxpg.PropertyGridManager(self)
-        self.scalar.AddPage('fp')
+        self.scalar = PropertyCtrl(self)
+        self.scalar.SetMinSize((-1, 200))
 
         self.table = wx.grid.Grid(self)
         self.table.SetDefaultCellAlignment(wx.ALIGN_CENTER, wx.ALIGN_CENTER)
@@ -226,9 +248,22 @@ class ResultFrame(wx.Frame):
         sizer.Add(self.scalar, 0, wx.EXPAND | wx.ALL, 1)
         sizer.Add(self.table,  1, wx.EXPAND | wx.ALL, 1)
 
+        self.SetMenuBar(self.BuildMenu())
+
         self.SetSizer(sizer)
         self.Layout()
         self.Centre(wx.BOTH)
+
+    def BuildMenu(self):
+
+        menubar = wx.MenuBar()
+
+        menu = wx.Menu()
+        menu.Append(wx.NewId(), 'CSV\tCtrl+E')
+        menu.Append(wx.NewId(), 'TeX')
+        menubar.Append(menu, 'Export to')
+
+        return menubar
 
 class LineSelectDialog(wx.Dialog):
     def __init__(self, parent, title):
@@ -262,3 +297,5 @@ class PlotFrame(wx.Frame):
         self.plot.SetEnableAntiAliasing(True)
         self.plot.SetEnableHiRes(True)
         self.plot.SetEnableLegend(True)
+
+        self.Centre(wx.BOTH)

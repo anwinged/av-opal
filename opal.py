@@ -33,7 +33,7 @@ class ModelData:
         # если мы создаем набор данных из другого набора данных
         elif isinstance(model, ModelData):
             self.mdef = model.mdef.Copy()
-            self.jid  = server.CreateJob() if model.jid != None else None
+            self.jid  = server.CreateJob() if model.jid else None
         else:
             self.mdef = None
             self.jid  = None
@@ -133,6 +133,9 @@ class MainFrame(forms.MainFrame):
         self.Bind(wx.EVT_MENU, self.OnAddMarkers,
             id = forms.ID_ADD_MARKERS)
 
+        self.Bind(wx.EVT_MENU, self.OnAbout,
+            id = forms.ID_ABOUT)
+
         # События приложения
 
         self.Bind(wx.EVT_CLOSE, self.OnClose)
@@ -157,6 +160,11 @@ class MainFrame(forms.MainFrame):
     def OnClose(self, event):
         self.server.Stop()
         self.Destroy()
+
+    def OnAbout(self, event):
+        self.do_nothing = True
+        forms.AboutDialog(self).ShowModal()
+        self.do_nothing = False
 
     def OnIdle(self, event):
         pass
@@ -225,6 +233,23 @@ class MainFrame(forms.MainFrame):
                     pass
         except Exception, e:
             print 'Error in overseer: ', e
+
+    def item_protector(func):
+        """
+        Защитный механизм, который ловит исключения при неправильном
+        обращении к элементам деревьев (компоненты TreeCtrl, TreeListCtrl)
+
+        Возвращает None, если было поймано исключение.
+        Использование с функциями, которые не являются обработчиками событий
+        не желательно
+        """
+        def Checker(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except ItemError:
+                print 'Oops'
+
+        return Checker
 
     # Функции создания модели, сохранения и загрузки
 
@@ -319,7 +344,7 @@ class MainFrame(forms.MainFrame):
         Добавляет пользовательскую модель или спецификацию
         в корень дерева моделей.
         """
-
+        # строим список моделей, которые будут добавлены
         ms = []
         while model:
             ms.append(model)
@@ -342,6 +367,8 @@ class MainFrame(forms.MainFrame):
             um.SetPyData(item, data)
         if root:
             um.Expand(root)
+        um.SelectItem(item)
+        um.SetFocus()
 
     def OnAddModelToRoot(self, event):
         model = self.GetSelectedData(self.m_specs)
@@ -364,7 +391,9 @@ class MainFrame(forms.MainFrame):
             new_data = ModelData(self.server, model, pmdef)
             um.SetPyData(child, new_data)
             um.SetItemImage(child, self.icons.mready)
+            um.SetFocus()
             um.Expand(item)
+            um.SelectItem(child)
         else:
             wx.MessageBox('It\'s impossible to append model', 'Error')
 
@@ -429,17 +458,37 @@ class MainFrame(forms.MainFrame):
         pass
 
     def OnParamChanged(self, event):
+
+        def Walk(item):
+            um.SetItemImage(item, self.icons.mready)
+            child, _ = um.GetFirstChild(item)
+            while child.IsOk():
+                Walk(child)
+                child = um.GetNextSibling(child)
+
+        um = self.m_user_models
         prop = event.GetProperty()
         if not prop:
             return
         value = prop.GetValue()
         param = prop.GetClientData()
-        item, data = self.GetSelectedItemData(self.m_user_models)
+        item, data = self.GetSelectedItemData(um)
         data.mdef[param] = value
-        self.m_user_models.SetItemImage(item, self.icons.mready)
+        Walk(item)
+
 
     def OnTest(self, event):
+
+        def Walk(item):
+            print um.GetItemText(item)
+            um.SetItemImage(item, self.icons.mready)
+            child, cookie = um.GetFirstChild(item)
+            while child.IsOk():
+                Walk(child)
+                child = um.GetNextSibling(child)
+
         um = self.m_user_models
+        Walk(um.GetRootItem())
 
     # Получение данных выбранной модели
 
@@ -465,6 +514,15 @@ class MainFrame(forms.MainFrame):
 
     # Дублирование модели
 
+    def Duplicate(self, item_src, item_dst):
+        um = self.m_user_models
+        data     = um.GetPyData(item_src)
+        title    = um.GetItemText(item_src)
+        new_data = ModelData(self.server, data)
+        um.SetItemText(item_dst, self.GenerateName(title))
+        um.SetPyData(item_dst, new_data)
+        um.SetItemImage(item_dst, self.icons.mready)
+
     def OnDuplicate(self, event):
         """
         Обработчик события "дублирование модели"
@@ -474,17 +532,29 @@ class MainFrame(forms.MainFrame):
         Результаты модели-оригинала не копируются.
         """
         um = self.m_user_models
-        item, data = self.GetSelectedItemData(self.m_user_models)
-        title    = um.GetItemText(item)
-        parent   = um.GetItemParent(item)
-        child    = um.AppendItem(parent, self.GenerateName(title))
-        new_data = ModelData(self.server, data)
-        um.SetPyData(child, new_data)
-        um.SetItemImage(child, self.icons.mready)
-        self.SetStatusText('Copy for "{}" created'.format(title), 0)
+        item_src = self.GetSelectedItem(um)
+        parent   = um.GetItemParent(item_src)
+        item_dst = um.AppendItem(parent, 'new-item')
+        self.Duplicate(item_src, item_dst)
+        # self.SetStatusText('Copy for "{}" created'.format(title), 0)
 
     def OnDuplicateTree(self, event):
-        pass
+
+        def Walk(item_src, item_dst):
+            self.Duplicate(item_src, item_dst)
+
+            child_src, _ = um.GetFirstChild(item_src)
+            while child_src.IsOk():
+                child_dst = um.AppendItem(item_dst, 'new-item')
+                Walk(child_src, child_dst)
+                child_src = um.GetNextSibling(child_src)
+
+        um = self.m_user_models
+        item_src = self.GetSelectedItem(um)
+        parent   = um.GetItemParent(item_src)
+        item_dst = um.AppendItem(parent, 'new-item')
+        Walk(item_src, item_dst)
+        um.Expand(item_dst)
 
     # Удаление модели
 
@@ -579,6 +649,7 @@ class MainFrame(forms.MainFrame):
             else:
                 self.m_plots.SetItemImage(child, self.icons.pline)
 
+    @item_protector
     def OnAddCurves(self, event):
         self.AddLines(LINE_CURVE)
 
@@ -749,7 +820,10 @@ class PlotFrame(forms.PlotFrame):
     def __init__(self, parent, title, lines):
         forms.PlotFrame.__init__(self, parent, title)
 
-        colours = ['red', 'blue', 'green']
+        self.Bind(wx.EVT_MENU, self.OnSaveImage,
+            id = forms.ID_SAVE_PLOT)
+
+        colours = ['red', 'blue', 'green', 'magenta', 'purple', 'brown', 'yellow']
         plot_lines = []
         for i, line in enumerate(lines):
             attr = {}
@@ -765,6 +839,23 @@ class PlotFrame(forms.PlotFrame):
 
         graph = wxplot.PlotGraphics(plot_lines)
         self.plot.Draw(graph)
+
+    def OnSaveImage(self, event):
+        img_file = wx.FileSelector('Save plot',
+            default_filename = 'plot.png',
+            default_extension = 'png',
+            wildcard = 'PNG files (*.png)|*.png',
+            flags = wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
+        size_sel = forms.SizeSelector(self)
+        if img_file and size_sel.ShowModal() == wx.ID_OK:
+            self.plot.Freeze()
+            w, h = size_sel.GetValues()
+            old_size = self.plot.GetSize()
+            self.plot.SetSize((w, h))
+            self.plot.SaveFile(img_file)
+            self.plot.SetSize(old_size)
+            self.plot.Thaw()
+
 
 #-----------------------------------------------------------------------------
 # Приложение

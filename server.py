@@ -130,34 +130,26 @@ class LocalServer:
     def GetJobsCount(self):
         return len(self.jobs)
 
-    #def CheckJID(self, func):
-    #    def
-
     def GetJobState(self, jid):
         job = self.jobs.get(jid)
-        if job != None:
+        if job:
             return job.GetState()
 
     def IsJobChanged(self, jid):
         job = self.jobs.get(jid)
-        if job != None:
-            return job.IsChanged()
-        else:
-            False
+        return job.IsChanged() if job else False
 
     def GetJobResult(self, jid):
         job = self.jobs.get(jid)
-        if job != None:
-            return job.GetResult()
+        return job.GetResult() if job else None
 
     def GetJobTID(self, jid):
         job = self.jobs.get(jid)
-        if job != None:
-            return job.tid
+        return job.tid if job else None
 
     def LaunchJob(self, jid, data_def):
         job = self.jobs.get(jid)
-        if job != None:
+        if job:
             tid      = data_def.DD.tid
             datadump = data_def.PackParams()
             job.Launch(tid, datadump)
@@ -165,12 +157,12 @@ class LocalServer:
 
     def StopJob(self, jid):
         job = self.jobs.get(jid)
-        if job != None:
+        if job:
             job.Stop()
 
     def DeleteJob(self, jid):
         job = self.jobs.get(jid)
-        if job != None:
+        if job:
             job.Stop()
             del self.jobs[jid]
 
@@ -317,8 +309,8 @@ class Job:
         self.ChangeState()
 
     def Stop(self):
-        WriteToLog('Try to kill')
         if self.proc and self.proc.poll() == None:
+            WriteToLog('Try to kill')
             self.proc.kill()
             self.ChangeState()
             WriteToLog('Job killed')

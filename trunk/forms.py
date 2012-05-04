@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import sys
 import wx
 import wx.gizmos
 import wx.grid
@@ -28,6 +29,10 @@ ID_ADD_CURVES           = wx.NewId()
 ID_ADD_MARKERS          = wx.NewId()
 
 ID_ABOUT                = wx.NewId()
+
+ID_EXPORT_CSV           = wx.NewId()
+
+ID_SAVE_PLOT            = wx.NewId()
 
 class TreeListCtrl(wx.gizmos.TreeListCtrl):
     def __iter__(self):
@@ -137,8 +142,7 @@ class MainFrame(wx.Frame):
 
         self.BuildContextMenu()
 
-        # tbar = self.BuildToolBar()
-        # self.SetToolBar(tbar)
+        self.BuildToolBar()
 
         self.auimgr.Update()
 
@@ -171,7 +175,7 @@ class MainFrame(wx.Frame):
         menu.Append(ID_ADD_MODEL_SELECTED, 'Append model to selected')
         menu.AppendSeparator()
         menu.Append(ID_DUPLICATE_MODEL, "&Duplicate\tCtrl+D")
-        #menu.Append(ID_DUPLICATE_TREE, "&Duplicate with subitems\tCtrl+Shift+D")
+        menu.Append(ID_DUPLICATE_TREE, "&Duplicate with subitems\tCtrl+Shift+D")
         menu.Append(ID_DELETE_MODEL, 'Delete\tCtrl+E')
         menu.AppendSeparator()
         menu.Append(ID_TEST, "&Test\tCtrl+T")
@@ -211,11 +215,41 @@ class MainFrame(wx.Frame):
         self.m_plots.Bind(wx.EVT_CONTEXT_MENU,
             lambda x: self.m_plots.PopupMenu(menu1))
 
+        menu2 = wx.Menu()
+        menu2.Append(ID_SHOW_RESULT,  'Show report')
+        menu2.AppendSeparator()
+        menu2.Append(ID_ADD_CURVES,  'Add curves')
+        menu2.Append(ID_ADD_MARKERS, 'Add markers')
+        self.m_user_models.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK,
+            lambda x: self.m_user_models.PopupMenu(menu2))
+
     def BuildToolBar(self):
-        tbar = wx.ToolBar(self, -1)
-        tbar.AddLabelTool(ID_SHOW_PLOT, 'Plot', wx.Bitmap('share/show-plot.png'))
-        tbar.Realize()
-        return tbar
+        tb1 = aui.AuiToolBar(self, -1, wx.DefaultPosition, wx.DefaultSize,
+                             agwStyle = aui.AUI_TB_DEFAULT_STYLE | aui.AUI_TB_VERTICAL)
+        tb1.SetToolBitmapSize(wx.Size(16, 16))
+
+        tb1.AddSimpleTool(ID_ADD_MODEL_SELECTED, "model-new", wx.Bitmap('share/model-add.png'),
+            'Add spacification to selected model')
+        tb1.AddSeparator()
+        tb1.AddSimpleTool(ID_DUPLICATE_MODEL, "model-dup", wx.Bitmap('share/model-dup.png'),
+            'Duplicate selected model')
+        tb1.AddSimpleTool(ID_DELETE_MODEL, "model-del", wx.Bitmap('share/model-delete.png'),
+            'Delete selected model')
+        tb1.AddSeparator()
+        tb1.AddSimpleTool(ID_PROCESS_MODEL, "model-go", wx.Bitmap('share/model-go.png'),
+            'Start process selected model')
+        tb1.AddSeparator()
+        tb1.AddSimpleTool(ID_SHOW_PLOT, "plot-quick", wx.Bitmap('share/plot-line.png'),
+            'Show quick plot for selected model')
+        tb1.AddSimpleTool(ID_SHOW_RESULT, "report-show", wx.Bitmap('share/report-show.png'),
+            'Show result data and table for selected model')
+        tb1.AddSeparator()
+        tb1.AddSimpleTool(ID_ABOUT, "app-about", wx.Bitmap('share/app-about.png'),
+            'Show infomation about application')    
+        tb1.Realize()
+
+        self.auimgr.AddPane(tb1, aui.AuiPaneInfo().Name("tb1").Caption("Toolbar").
+                          ToolbarPane().Left().Floatable(False).Movable(False).Gripper(False))
 
 class SelectModelDialog(wx.Dialog):
     def __init__(self, parent):
@@ -259,8 +293,8 @@ class ResultFrame(wx.Frame):
         menubar = wx.MenuBar()
 
         menu = wx.Menu()
-        menu.Append(wx.NewId(), 'CSV\tCtrl+E')
-        menu.Append(wx.NewId(), 'TeX')
+        menu.Append(ID_EXPORT_CSV, 'CSV\tCtrl+E')
+        #menu.Append(wx.NewId(), 'TeX')
         menubar.Append(menu, 'Export to')
 
         return menubar
@@ -287,6 +321,37 @@ class LineSelectDialog(wx.Dialog):
         self.Layout()   
         self.Centre(wx.BOTH)
 
+class SizeSelector(wx.Dialog):
+    def __init__(self, parent):
+        wx.Dialog.__init__(self, parent, -1, 'Image size', size = (200, 100))
+
+        bSizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.width = wx.SpinCtrl(self)
+        self.width.SetRange(1, 5000)
+        self.width.SetValue(800)
+        bSizer.Add(self.width, 1, wx.EXPAND | wx.LEFT, 5)
+
+        self.height = wx.SpinCtrl(self)
+        self.height.SetRange(1, 5000)
+        self.height.SetValue(600)
+        bSizer.Add(self.height, 1, wx.EXPAND | wx.RIGHT, 5)
+
+        buttonsSizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.AddStretchSpacer(1)
+        sizer.Add(bSizer, 0, wx.EXPAND | wx.ALL, 0)
+        sizer.AddStretchSpacer(1)
+        sizer.Add(buttonsSizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        self.SetSizer(sizer)
+        self.Layout()   
+        self.Centre(wx.BOTH)
+
+    def GetValues(self):
+        return self.width.GetValue(), self.height.GetValue()
+
 class PlotFrame(wx.Frame):
     def __init__(self, parent, title):
         wx.Frame.__init__ (self, parent, -1, title, size = wx.Size(600, 400))
@@ -297,5 +362,42 @@ class PlotFrame(wx.Frame):
         self.plot.SetEnableAntiAliasing(True)
         self.plot.SetEnableHiRes(True)
         self.plot.SetEnableLegend(True)
+
+        self.Centre(wx.BOTH)
+
+        menubar = wx.MenuBar()
+        menu = wx.Menu()
+        menu.Append(ID_SAVE_PLOT, 'Save to file\tCtrl+S')
+        menubar.Append(menu, 'Plot')
+        self.SetMenuBar(menubar)
+
+
+class AboutDialog(wx.Dialog):
+    def __init__(self, parent):
+        wx.Dialog.__init__(self, parent, title = 'About Opal', size = (300, 330))
+
+        title   = 'Opal System'
+        version = 'Aurora version'
+        copyr   = '(c) 2012 Anton Vakhrushev'
+
+        self.SetBackgroundColour(wx.Colour(42, 42, 40))
+
+        img = wx.StaticBitmap(self)
+        img.SetBitmap(wx.Bitmap('share/opal_logo.png'))
+
+        st = wx.StaticText(self, -1, title,
+            pos = (15, 170), size = (270, 100))
+        st.SetForegroundColour(wx.Colour(245, 245, 0))
+        st.SetFont(wx.Font(24, wx.SWISS, wx.NORMAL, wx.NORMAL, False, "Verdana"));
+
+        st = wx.StaticText(self, -1, version,
+            pos = (25, 215), size = (250, 20))
+        st.SetForegroundColour(wx.Colour(240, 240, 240))
+        st.SetFont(wx.Font(12, wx.SWISS, wx.NORMAL, wx.NORMAL, False, "Verdana"));
+
+        st = wx.StaticText(self, -1, copyr,
+            pos = (25, 255), size = (250, 30))
+        st.SetForegroundColour(wx.Colour(240, 240, 240))
+        st.SetFont(wx.Font(10, wx.SWISS, wx.NORMAL, wx.NORMAL, False, "Verdana"));
 
         self.Centre(wx.BOTH)

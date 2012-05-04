@@ -12,13 +12,11 @@
 # -*- coding: UTF-8 -*-
 
 import os
-import sys
 import json
 import time
 import datetime
 import threading
 import subprocess
-import logging
 
 import task
 
@@ -327,7 +325,7 @@ class Job:
 
 #-------------------------------------------------------------------------------
 
-import time, random
+import random
 from pprint import pprint
 
 def main():

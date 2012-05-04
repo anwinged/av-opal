@@ -18,8 +18,6 @@ import wx.propgrid as wxpg
 import wx.lib.plot as wxplot
 import forms
 import time
-import datetime
-import os
 import threading
 import re
 from wx.lib.embeddedimage import PyEmbeddedImage
@@ -85,7 +83,7 @@ class MainFrame(forms.MainFrame):
         # События компонентов
 
         self.m_user_models.Bind(wx.EVT_TREE_SEL_CHANGED,
-            self.OnModelActivated)
+            self.OnModelSelected)
         self.m_user_models.Bind(wx.EVT_TREE_DELETE_ITEM,
             self.OnDeleteModelsItem)
         self.m_params.Bind(wxpg.EVT_PG_CHANGING,
@@ -441,7 +439,7 @@ class MainFrame(forms.MainFrame):
             pg.Append(wxpg.StringProperty(label, value = str(param.GetValue())))
         pg.SetSplitterLeft()
 
-    def OnModelActivated(self, event):
+    def OnModelSelected(self, event):
         item = event.GetItem()
         data = self.m_user_models.GetPyData(item)
         if data:
@@ -474,6 +472,8 @@ class MainFrame(forms.MainFrame):
         param = prop.GetClientData()
         item, data = self.GetSelectedItemData(um)
         data.mdef[param] = value
+        # так как значение параметра изменилось,
+        # то все субмодели должны быть пересчитаны
         Walk(item)
 
 

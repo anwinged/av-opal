@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import sys
 import wx
 import wx.gizmos
 import wx.grid
@@ -230,9 +229,10 @@ class MainFrame(wx.Frame):
 
         tb1.AddSimpleTool(ID_ADD_MODEL_SELECTED, "model-new", wx.Bitmap('share/model-add.png'),
             'Add spacification to selected model')
-        tb1.AddSeparator()
         tb1.AddSimpleTool(ID_DUPLICATE_MODEL, "model-dup", wx.Bitmap('share/model-dup.png'),
             'Duplicate selected model')
+        tb1.AddSimpleTool(ID_DUPLICATE_TREE, "model-dup-tree", wx.Bitmap('share/model-dup-tree.png'),
+            'Duplicate selected model and all submodels')
         tb1.AddSimpleTool(ID_DELETE_MODEL, "model-del", wx.Bitmap('share/model-delete.png'),
             'Delete selected model')
         tb1.AddSeparator()
@@ -352,16 +352,29 @@ class SizeSelector(wx.Dialog):
     def GetValues(self):
         return self.width.GetValue(), self.height.GetValue()
 
+HandCursorImage = wx.Image('share/cursor-openhand.png')
+GrabHandCursorImage = wx.Image('share/cursor-closedhand.png')
+
 class PlotFrame(wx.Frame):
     def __init__(self, parent, title):
         wx.Frame.__init__ (self, parent, -1, title, size = wx.Size(600, 400))
 
         self.plot = wxplot.PlotCanvas(self)
+
+        # стандартные курсоры компонента настолько монстроуозные,
+        # что их просто необходимо заменить на что-нибудь приличное
+        self.plot.canvas.SetCursor(wx.STANDARD_CURSOR)
+        self.plot.HandCursor = wx.CursorFromImage(HandCursorImage)
+        self.plot.GrabHandCursor = wx.CursorFromImage(GrabHandCursorImage)
+        # все равно не используется
+        # self.plot.MagCursor = wx.StockCursor(wx.CURSOR_MAGNIFIER)
+
         self.plot.SetGridColour(wx.Color(200, 200, 200))
         self.plot.SetEnableGrid(True)
         self.plot.SetEnableAntiAliasing(True)
         self.plot.SetEnableHiRes(True)
         self.plot.SetEnableLegend(True)
+        self.plot.SetEnableDrag(True)
 
         self.Centre(wx.BOTH)
 
@@ -371,6 +384,15 @@ class PlotFrame(wx.Frame):
         menubar.Append(menu, 'Plot')
         self.SetMenuBar(menubar)
 
+        self.plot.Bind(wx.EVT_MOUSEWHEEL, self.OnZoom)        
+
+    def OnZoom(self, event):
+        x = event.GetX()
+        y = event.GetY()
+        r = event.GetWheelRotation()
+        x, y = self.plot.PositionScreenToUser((x, y))
+        delta = 0.8/1.0 if r > 0 else 1.0/0.8
+        self.plot.Zoom((x, y), (delta, delta))
 
 class AboutDialog(wx.Dialog):
     def __init__(self, parent):

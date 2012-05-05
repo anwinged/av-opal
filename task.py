@@ -179,6 +179,9 @@ class ResultData:
 
     rows = property(GetRows)
 
+    def GetCell(self, row, col):
+        return self.table[row][col]
+
     def GetColumn(self, index):
         return [ row[index] for row in self.rows ]
 

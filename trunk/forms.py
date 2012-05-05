@@ -278,6 +278,7 @@ class ResultFrame(wx.Frame):
 
         self.table = wx.grid.Grid(self)
         self.table.SetDefaultCellAlignment(wx.ALIGN_CENTER, wx.ALIGN_CENTER)
+        self.table.DisableCellEditControl()
 
         sizer.Add(self.scalar, 0, wx.EXPAND | wx.ALL, 1)
         sizer.Add(self.table,  1, wx.EXPAND | wx.ALL, 1)
@@ -366,8 +367,7 @@ class PlotFrame(wx.Frame):
         self.plot.canvas.SetCursor(wx.STANDARD_CURSOR)
         self.plot.HandCursor = wx.CursorFromImage(HandCursorImage)
         self.plot.GrabHandCursor = wx.CursorFromImage(GrabHandCursorImage)
-        # все равно не используется
-        # self.plot.MagCursor = wx.StockCursor(wx.CURSOR_MAGNIFIER)
+        self.plot.MagCursor = wx.StockCursor(wx.CURSOR_MAGNIFIER)
 
         self.plot.SetGridColour(wx.Color(200, 200, 200))
         self.plot.SetEnableGrid(True)
@@ -384,7 +384,10 @@ class PlotFrame(wx.Frame):
         menubar.Append(menu, 'Plot')
         self.SetMenuBar(menubar)
 
-        self.plot.Bind(wx.EVT_MOUSEWHEEL, self.OnZoom)        
+        self.plot.canvas.Bind(wx.EVT_MOUSEWHEEL, self.OnZoom)  
+        self.plot.canvas.Bind(wx.EVT_MIDDLE_DOWN, self.OnZoomReset)
+        self.plot.canvas.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
+        self.plot.canvas.Bind(wx.EVT_KEY_UP, self.OnKeyUp)    
 
     def OnZoom(self, event):
         x = event.GetX()
@@ -393,6 +396,19 @@ class PlotFrame(wx.Frame):
         x, y = self.plot.PositionScreenToUser((x, y))
         delta = 0.8/1.0 if r > 0 else 1.0/0.8
         self.plot.Zoom((x, y), (delta, delta))
+
+    def OnZoomReset(self, event):
+        self.plot.Reset()
+
+    def OnKeyDown(self, event):
+        if event.GetKeyCode() == wx.WXK_SHIFT:
+            self.plot.SetEnableDrag(False)
+            self.plot.SetEnableZoom(True)
+
+    def OnKeyUp(self, event):
+        if event.GetKeyCode() == wx.WXK_SHIFT:
+            self.plot.SetEnableZoom(False)
+            self.plot.SetEnableDrag(True)
 
 class AboutDialog(wx.Dialog):
     def __init__(self, parent):

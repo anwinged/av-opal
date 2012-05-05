@@ -625,6 +625,7 @@ class MainFrame(forms.MainFrame):
 
         return lines
 
+    @item_protector
     def AddLines(self, line_type):
         item, data = self.GetSelectedItemData(self.m_plots)
         if data != 'plot':
@@ -649,7 +650,6 @@ class MainFrame(forms.MainFrame):
             else:
                 self.m_plots.SetItemImage(child, self.icons.pline)
 
-    @item_protector
     def OnAddCurves(self, event):
         self.AddLines(LINE_CURVE)
 
@@ -738,6 +738,9 @@ class ResultFrame(forms.ResultFrame):
         self.result = result
         self.UpdateResults()
 
+        self.Bind(wx.EVT_MENU, self.OnExportToCSV,
+            id = forms.ID_EXPORT_CSV)
+
     def UpdateResults(self):
         self.scalar.Clear()
         self.table.ClearGrid()
@@ -768,7 +771,38 @@ class ResultFrame(forms.ResultFrame):
                     value = str(param.GetValue())))
 
     def OnExportToCSV(self, event):
-        pass
+
+        if not self.result or not self.result.table:
+            return
+
+        text_file = wx.FileSelector('Save table to CSV',
+            default_filename = 'table.csv',
+            wildcard = 'PNG files (*.csv)|*.csv|Text files (*.txt)|*.txt',
+            flags = wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
+
+        if not text_file:
+            return
+
+        tl = self.table.GetSelectionBlockTopLeft() # [(t, l)]
+        br = self.table.GetSelectionBlockBottomRight() # [(b, r)]
+
+        if not tl:
+            tl = (0, 0)
+        else:
+            tl = tl[0]
+
+        if not br:
+            br = (len(self.result.rows), len(self.result.columns))
+        else:
+            x, y = br[0]
+            br = x + 1, y + 1
+
+        with open(text_file, 'w') as f:
+            for i in xrange(tl[0], br[0]):
+                s = []
+                for j in xrange(tl[1], br[1]):
+                    s.append(repr(self.result.GetCell(i, j)))
+                f.write('; '.join(s) + '\n')
 
 #-----------------------------------------------------------------------------
 # Форма с выбором наборов значений для построения графика
@@ -855,7 +889,6 @@ class PlotFrame(forms.PlotFrame):
             self.plot.SaveFile(img_file)
             self.plot.SetSize(old_size)
             self.plot.Thaw()
-
 
 #-----------------------------------------------------------------------------
 # Приложение

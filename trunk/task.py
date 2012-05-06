@@ -42,6 +42,17 @@ class Parameter:
     def Test(self, value):
         return True
 
+    def DumpData(self):
+        """
+        Возвращает данные в стандартных контейнерах
+
+        READ ONLY!!!
+        """
+        return self.data
+
+    def LoadData(self, data):
+        self.data = data
+
 class Value(Parameter):
     def __init__(self, label, value):
         if isinstance(value, dict):
@@ -70,6 +81,13 @@ class Column(Parameter):
         except:
             pass
 
+    def DumpData(self):
+        return [
+            self.GetLabel(),
+            self.GetType(),
+            self.GetTitle(),
+        ]
+
 #-------------------------------------------------------------------------------
 
 class DataDescription:
@@ -86,10 +104,12 @@ class DataDescription:
             par = Parameter(label, self.pdata[label])
             self.pdata[label] = par
 
-        self.specs = []
         # рекурсивное создание описаний спецификаций
-        for label, data in self.data.get('spec', {}).iteritems():
-            self.specs.append(DataDescription(self, label, data, self.tid))
+        self.specs = { label: DataDescription(self, label, data, self.tid)
+            for label, data in self.data.get('spec', {}).iteritems() }
+                    
+        # for label, data in self.data.get('spec', {}).iteritems():
+        #     self.specs.append(DataDescription(self, label, data, self.tid))
 
     def GetLabel(self):
         return self.label
@@ -114,6 +134,9 @@ class DataDescription:
 
     def GetImage(self):
         return self.data.get('img')
+
+    def GetTaskId(self):
+        return self.tid
 
     def __getitem__(self, label):
         return self.pdata.get(label)
@@ -158,16 +181,7 @@ class DataDefinition:
 
 class ResultData:
     def __init__(self, data):
-        self.data = {}
-        for key, value in data.get('data', {}).iteritems():
-            self.data[key] = Value(key, value)
-
-        table = data.get('table', [])
-        self.head  = {}
-        self.table = []
-        if table:
-            self.head  = [ Column(item) for item in table[0] ]
-            self.table = table[1:]
+        self.LoadData(data)
 
     def GetColumns(self):
         return self.head
@@ -187,3 +201,28 @@ class ResultData:
 
     def Zip(self, col1, col2):
         return [ (row[col1], row[col2]) for row in self.rows ]
+
+    def DumpData(self):
+        data = {}
+        if self.data:
+            data['data'] = { key: self.data[key].DumpData() 
+                for key in self.data }
+        
+        if self.head:
+            head = [ col.DumpData() for col in self.columns ]
+            body = self.table
+            data['table'] = [head] + body
+        return data
+
+    def LoadData(self, data):
+        self.data = {}
+        for key, value in data.get('data', {}).iteritems():
+            self.data[key] = Value(key, value)
+
+        table = data.get('table', [])
+        self.head  = []
+        self.table = []
+        if table:
+            self.head  = [ Column(item) for item in table[0] ]
+            self.table = table[1:]
+

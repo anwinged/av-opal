@@ -13,14 +13,19 @@
 
 import server
 import task
+
 import wx
-import wx.propgrid as wxpg
-import wx.lib.plot as wxplot
 import forms
+wxpg = forms.wxpg
+wxplot = forms.wxplot   
+from wx.lib.embeddedimage import PyEmbeddedImage
+
 import time
 import threading
 import re
-from wx.lib.embeddedimage import PyEmbeddedImage
+import json
+import zlib
+from pprint import pprint
 
 class ModelData:
     def __init__(self, server, model, parent_data = None):
@@ -38,9 +43,9 @@ class ModelData:
 
         self.res  = None
 
-LINE_CURVE      = 1
-LINE_MARKER     = 2
-LINE_HISTOGRAM  = 3
+LINE_CURVE     = 1
+LINE_MARKER    = 2
+LINE_HISTOGRAM = 3
 
 class LineData:
     """
@@ -62,6 +67,10 @@ class LineData:
         self.columns = columns      # пара (x, y)
         self.colour = colour        # цвет: если не задан выбирается из списка
         self.style = style          # стиль: если не задан, еспользуется по умолчанию
+
+    def GetModelTitle(self):
+        container, item = self.ums_ptr
+        return container.GetItemText(item)
 
     def GetTitle(self):
         # если есть указатель на компонент с графиками,
@@ -98,6 +107,7 @@ class MainFrame(forms.MainFrame):
     def __init__(self):
         forms.MainFrame.__init__(self, None)
 
+        self.model = None
         self.name_id = 1
 
         s = server.LocalServer()
@@ -129,6 +139,10 @@ class MainFrame(forms.MainFrame):
 
         self.Bind(wx.EVT_MENU, self.OnNewProject,
             id = forms.ID_NEW)
+        self.Bind(wx.EVT_MENU, self.OnOpenProject,
+            id = forms.ID_OPEN)
+        self.Bind(wx.EVT_MENU, self.OnSaveProject,
+            id = forms.ID_SAVE)
 
         self.Bind(wx.EVT_MENU, self.OnTest,
             id = forms.ID_TEST)
@@ -283,7 +297,7 @@ class MainFrame(forms.MainFrame):
         """
         def DoItem(item, model):
             sp.SetPyData(item, model)
-            for spec in model.GetSpecs():
+            for label, spec in model.GetSpecs().iteritems():
                 child = sp.AppendItem(item, spec.GetTitle())
                 DoItem(child, spec)
 
@@ -294,7 +308,7 @@ class MainFrame(forms.MainFrame):
         sp.ExpandAll()
         sp.SortChildren(root)
 
-    def NewProject(self, model):
+    def NewProject(self, model, create_default = True):
         """
         Начать новый проект:
         0. Очичтить все компоненты
@@ -307,6 +321,8 @@ class MainFrame(forms.MainFrame):
         self.m_params.Clear()
         self.m_quick_result.Clear()
         self.m_plots.DeleteAllItems()
+        # фиксируем выбранную модель
+        self.model = model
         # Строим спецификации
         self.BuildSpecs(model)
         # Очищаем окно пользовательских моделей
@@ -314,7 +330,8 @@ class MainFrame(forms.MainFrame):
         um = self.m_user_models
         um.DeleteAllItems()
         um.AddRoot('root')
-        self.AddModelToRoot(model)
+        if create_default:
+            self.AddModelToRoot(model)
         # Создаем корневой элемент для окна с графиками
         self.m_plots.AddRoot('root')
 
@@ -329,7 +346,122 @@ class MainFrame(forms.MainFrame):
             model = f.GetSelectedModel()
             if model:
                 self.NewProject(model)
+
         self.do_nothing = False
+
+    def OnOpenProject(self, event):
+
+        def WalkModels(source, root, models, model_def = None):
+            
+            for key, value in source.iteritems():
+                label = value['model']
+                if label not in models:
+                    raise KeyError, 'no "{}"'.format(label)
+                data = ModelData(self.server, models[label], model_def)
+                data.mdef.params = value['data']
+                if 'result' in value:
+                    data.res = task.ResultData(value['result'])
+                # тут надо проверить все добавленные параметры
+
+                item = um.AppendItem(root, key)
+                um.SetPyData(item, data)
+                model_items[key] = item
+                WalkModels(value['um'], item, models[label].GetSpecs(), data)
+
+        try:        
+            infile = 'data.opl'
+            data = {}
+            with open(infile, 'rb') as f:
+                data = json.loads(zlib.decompress(f.read()))
+
+            pprint(data)
+
+            tid = data['tid']
+            model_label = data['model']
+            model = self.server.CheckModel(tid, model_label) 
+            if not model:
+                raise ValueError
+
+            self.NewProject(model, False)
+
+            um = self.m_user_models
+            model_items = {}
+            root = um.GetRootItem()
+            WalkModels(data['um'], root, {model.GetLabel(): model})
+
+        # except KeyError, e:
+        #     wx.MessageBox("Can't parse saved file!", 'Error!')
+        # except ValueError, e:
+        #     wx.MessageBox("Can't parse saved file!", 'Error!')
+        except Exception, e:
+            print 'Oops', type(e), e
+
+
+    def OnSaveProject(self, event):
+
+        def WalkModels(item, dest):
+            if item != um.GetRootItem():
+                data = um.GetPyData(item)
+                title = um.GetItemText(item)
+                mdef = data.mdef
+                dest[title] = {
+                    'model': mdef.DD.GetLabel(),
+                    'data': mdef.params,
+                    'um': {}
+                }
+                if data.res:
+                    dest[title]['result'] = data.res.DumpData()
+                dest = dest[title]['um']
+
+            child, _ = um.GetFirstChild(item)
+            while child.IsOk():
+                WalkModels(child, dest)
+                child = um.GetNextSibling(child)
+
+        def WalkPlots(root, dest):
+            # по всеи элементам первого уровня
+            item1, _ = self.m_plots.GetFirstChild(root)
+            while item1.IsOk():
+                # по всем элементам второго уровня
+                item2, _ = self.m_plots.GetFirstChild(item1)
+                lines = []
+                while item2.IsOk():
+                    line = self.m_plots.GetPyData(item2)
+                    data = {
+                        'title': self.m_plots.GetItemText(item2),
+                        'colx': line.columns[0],
+                        'coly': line.columns[1],
+                        'model': line.GetModelTitle(),
+                        'type': line.type,
+                    }
+                    lines.append(data)
+                    item2 = self.m_plots.GetNextSibling(item2)
+                title = self.m_plots.GetItemText(item1)
+                dest.append([title, lines])
+                item1 = self.m_plots.GetNextSibling(item1)
+
+
+        wx.BeginBusyCursor()
+
+        data = {}
+
+        data['tid'] = self.model.GetTaskId()
+        data['model'] = self.model.GetLabel()
+
+        um = self.m_user_models
+        data['um'] = {}
+        WalkModels(um.GetRootItem(), data['um'])
+
+        data['plots'] = []
+        WalkPlots(self.m_plots.GetRootItem(), data['plots'])
+
+        # pprint(data)
+        dump = json.dumps(data, indent = 2)
+        with open('data.opl', 'wb') as f:
+            f.write(zlib.compress(dump, 9))
+            # f.write(dump)
+
+        wx.EndBusyCursor()
 
     # Функции непосредственной работы с моделями:
     # создание, изменение, дублирование и прочее
@@ -501,7 +633,6 @@ class MainFrame(forms.MainFrame):
         # так как значение параметра изменилось,
         # то все субмодели должны быть пересчитаны
         Walk(item)
-
 
     def OnTest(self, event):
 
@@ -955,6 +1086,9 @@ class ThisApp(wx.App):
 # Запуск приложения
 #-----------------------------------------------------------------------------
 
-if __name__ == "__main__":
+def main():
     app = ThisApp(redirect = False)
-    app.MainLoop()
+    app.MainLoop()    
+
+if __name__ == "__main__":
+    main()

@@ -50,16 +50,42 @@ class LineData:
     поэтому не имеет собственного значения названия. Вместо этого
     название берется из графического компонента.
     """
-    def __init__(self, type, mdata, columns, colour = None, style = None):
-        self.type       = type      # тип графика
-        self.mdata      = mdata     # указатель на данные модели
-        self.title      = ''
-        self.columns    = columns   # пара (x, y)
-        self.colour     = colour    # цвет: если не задан выбирается из списка
-        self.style      = style     # стиль: если не задан, еспользуется по умолчанию
+    def __init__(self, ums_ptr, plots_ptr,
+        type, columns, colour = None, style = None):
+
+        self.ums_ptr = ums_ptr      # (ptr, item) указатель на компонент с моделями
+                                    # и индекс в этом компоненте
+        self.plots_ptr = plots_ptr  # (ptr, item) указатель на компонент с графиками
+                                    # и индекс в этом компоненте
+
+        self.type = type            # тип графика
+        self.columns = columns      # пара (x, y)
+        self.colour = colour        # цвет: если не задан выбирается из списка
+        self.style = style          # стиль: если не задан, еспользуется по умолчанию
+
+    def GetTitle(self):
+        # если есть указатель на компонент с графиками,
+        # извлекаем оттуда название
+        if self.plots_ptr:
+            container, item = self.plots_ptr
+            return container.GetItemText(item)
+        # иначе формируем название на основе имени модели и
+        # имен выбранных столбцов
+        else:
+            container, item = self.ums_ptr
+            title = container.GetItemText(item)
+            data = container.GetPyData(item)
+            assert data.res # если результата нет, то а-та-та
+            colx, coly = self.columns
+            title_x = data.res.columns[colx].GetTitle()
+            title_y = data.res.columns[coly].GetTitle()
+            return "{}: {}({})".format(title, title_y, title_x)
 
     def GetPoints(self):
-        return self.mdata.res.Zip(*self.columns)
+        container, item = self.ums_ptr
+        data = container.GetPyData(item)
+        assert data.res # если результата нет, то а-та-та
+        return data.res.Zip(*self.columns)
 
 class ItemError(Exception):
     pass
@@ -601,47 +627,73 @@ class MainFrame(forms.MainFrame):
 
         Возвращает список экземпляров LineData
         """
-        um = self.m_user_models
-        item, data = self.GetSelectedItemData(um)
-        title = um.GetItemText(item)
-        if not data.res:
-            wx.MessageBox('There is no any result data', 'Warning', wx.OK | wx.ICON_EXCLAMATION)
-            return []
-        f = LineSelectDialog(self, 'Select lines for "{}"'.format(title))
-        for index, col in enumerate(data.res.columns):
-            row_title = col.GetTitle()
-            row_data  = index
-            f.Add(row_title, row_data)
-        f.SetSelections()
 
+        def CreateLineSelectDialog(parent, title, model_data):
+            f = LineSelectDialog(parent, title)
+            for index, col in enumerate(model_data.res.columns):
+                row_title = col.GetTitle()
+                row_data  = index
+                f.Add(row_title, row_data)
+            f.SetSelections()
+            return f
+
+        def GetLinesFromUser(select_dialog):
+            lines = []
+            self.do_nothing = True
+            try:
+                if select_dialog.ShowModal() == wx.ID_OK:
+                    for xy in select_dialog.GetLineColumns():
+                        line_data = LineData(
+                            (um, item), # указатель на модель
+                            None,       # указатель на график
+                            line_type, xy) # тип линии, колонки и прочее
+                        lines.append(line_data)
+                f.Destroy()
+            finally:
+                self.do_nothing = False
+            return lines
+
+        um = self.m_user_models
         lines = []
-        self.do_nothing = True
-        try:
-            if f.ShowModal() == wx.ID_OK:
-                lines = [ LineData(line_type, data, xy)
-                            for xy in f.GetLineColumns() ]
-        finally:
-            self.do_nothing = False
+        items = um.GetSelections()
+        count = len(items)
+        for index, item in enumerate(items, 1):
+            data = um.GetPyData(item)
+            title = um.GetItemText(item)
+
+            msg = 'Line(s) for "{}" ({}/{})'.format(title, index, count)
+
+            if not data.res:
+                wx.MessageBox(
+                    'There is no any result data for model!', 
+                    msg, wx.OK | wx.ICON_EXCLAMATION)
+            else:
+                f = CreateLineSelectDialog(self, msg, data)
+                lines += GetLinesFromUser(f)
 
         return lines
 
     @item_protector
     def AddLines(self, line_type):
+        """
+        Добавляет линии в выделенный график компонента с графиками
+        (m_plots)
+        """
+        # получаем указатель на индекс и данные элемента, который выделен
         item, data = self.GetSelectedItemData(self.m_plots)
+        # если это на контейнер с графиками, то выходим
         if data != 'plot':
             return
+        # получаем указанные пользователем линии
         lines = self.GetLines(line_type)
-        if not lines:
-            return
-        it = self.GetSelectedItem(self.m_user_models)
+        # if not lines:
+        #     return
         for line in lines:
-            x, y = line.columns
-            data = line.mdata
-            model_name = self.m_user_models.GetItemText(it)
-            x_name = data.res.columns[x].GetTitle()
-            y_name = data.res.columns[y].GetTitle()
-            title  = "{}: {}({})".format(model_name, y_name, x_name)
-            child  = self.m_plots.AppendItem(item, title)
+            title = line.GetTitle()
+            child = self.m_plots.AppendItem(item, title)
+            # указываем на только что созданный новый элемент
+            line.plots_ptr = (self.m_plots, child)
+            # заполняем элемент данными
             self.m_plots.SetPyData(child, line)
             self.m_plots.SetItemImage(child, self.icons.pline)
             self.m_plots.Expand(item)
@@ -663,14 +715,9 @@ class MainFrame(forms.MainFrame):
 
     def OnQuickShowPlot(self, event):
         lines = self.GetLines(LINE_CURVE)
-        um    = self.m_user_models
-        item, data = self.GetSelectedItemData(um)
+        um = self.m_user_models
+        item = self.GetSelectedItem(um)
         title = um.GetItemText(item)
-        for line in lines:
-            colx, coly = line.columns
-            title_x = data.res.columns[colx].GetTitle()
-            title_y = data.res.columns[coly].GetTitle()
-            line.title = "{}: {}({})".format(title, title_y, title_x)
         self.ShowPlot(lines, title)
 
     def OnPlotProcess(self, event):
@@ -853,6 +900,7 @@ class LineSelectDialog(forms.LineSelectDialog):
 class PlotFrame(forms.PlotFrame):
     def __init__(self, parent, title, lines):
         forms.PlotFrame.__init__(self, parent, title)
+        self.lines = lines      # список объектор LineData
 
         self.Bind(wx.EVT_MENU, self.OnSaveImage,
             id = forms.ID_SAVE_PLOT)
@@ -868,7 +916,7 @@ class PlotFrame(forms.PlotFrame):
                 handle = wxplot.PolyLine
             points = line.GetPoints()
             attr['colour'] = line.colour or colours[i % len(colours)]
-            attr['legend'] = line.title or 'Unknown line'
+            attr['legend'] = line.GetTitle() or 'Unknown line'
             plot_lines.append(handle(points, **attr))
 
         graph = wxplot.PlotGraphics(plot_lines)

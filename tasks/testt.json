@@ -33,7 +33,7 @@
 
                 "n": {
                     "type":     "int",
-                    "default":  100,
+                    "default":  10,
                     "title":    "Steps",
                     "comment":  "Number of steps for algorithm"
                 }

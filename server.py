@@ -17,6 +17,7 @@ import time
 import datetime
 import threading
 import subprocess
+import hashlib
 
 import task
 
@@ -47,8 +48,6 @@ class LocalServer:
         self.queue_lock  = threading.Lock()
 
         # init actions
-
-        self.log = open('log.txt', 'w')
         self.WriteToLog('local server initialized')
 
     def Close(self):
@@ -61,7 +60,7 @@ class LocalServer:
     def WriteToLog(self, msg):
         tm = str(datetime.datetime.now())
         msg = tm + '  ' + msg
-        self.log.write(msg + '\n')
+        # self.log.write(msg + '\n')
         print msg
 
     def TestTaskData(self, data):
@@ -86,13 +85,14 @@ class LocalServer:
                 self.TestTaskData(data)
 
                 # вычисляем псевдоуникальный идентификатор модели
-                tid = hash(data['meta'])
+                tid = hashlib.md5(data['meta']).hexdigest()
                 # сохраняем описание задачи
                 self.tasks_meta[tid] = {
                     'title':    data.get('title', ''),
                     'author':   data.get('author', ''),
                     'meta':     data['meta'],
-                    'exec':     line
+                    'exec':     line,
+                    'models':   []
                 }
 
                 # выделяем описания моделей
@@ -101,6 +101,7 @@ class LocalServer:
                     model_descr = task.DataDescription(None, label, data, tid)
                     # добавляем в список описаний
                     self.models.append(model_descr)
+                    self.tasks_meta[tid]['models'].append(model_descr)
 
                 self.WriteToLog('Task from "{}" asked'.format(line))
             except IOError, e:
@@ -115,6 +116,13 @@ class LocalServer:
 
     def GetTaskMeta(self, tid):
         return self.tasks_meta.get(tid)
+
+    def CheckModel(self, tid, model_label):
+        models = self.tasks_meta[tid]['models']
+        for model in models:
+            if model_label == model.GetLabel():
+                return model
+        return None
 
     #--------------------------------------------------------------------------
 

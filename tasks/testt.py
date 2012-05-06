@@ -52,7 +52,7 @@ def serie(n, d, h, l = 0):
         y = sin_taylor(l, d)
         yield (l, y)
         l += h
-        time.sleep(0.01)
+        # time.sleep(0.002)
 
 def main():
 

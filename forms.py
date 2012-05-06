@@ -186,7 +186,7 @@ class MainFrame(wx.Frame):
         menubar.Append(menu, '&Run')
 
         menu = wx.Menu()
-        menu.Append(ID_SHOW_RESULT, 'Show numbers\tF7')
+        menu.Append(ID_SHOW_RESULT, 'Show report\tF7')
         menu.AppendSeparator()
         menu.Append(ID_SHOW_PLOT, 'Show plot\tF8')
         menu.Append(ID_ADD_PLOT, 'Add plot')
@@ -228,7 +228,7 @@ class MainFrame(wx.Frame):
         tb1.SetToolBitmapSize(wx.Size(16, 16))
 
         tb1.AddSimpleTool(ID_ADD_MODEL_SELECTED, "model-new", wx.Bitmap('share/model-add.png'),
-            'Add spacification to selected model')
+            'Add specification to selected model')
         tb1.AddSimpleTool(ID_DUPLICATE_MODEL, "model-dup", wx.Bitmap('share/model-dup.png'),
             'Duplicate selected model')
         tb1.AddSimpleTool(ID_DUPLICATE_TREE, "model-dup-tree", wx.Bitmap('share/model-dup-tree.png'),

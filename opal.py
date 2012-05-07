@@ -27,21 +27,43 @@ import json
 import zlib
 from pprint import pprint
 
+# состояния модели, унаследованные от состояния задачи
+MODEL_READY = server.JOB_READY
+MODEL_RUNNING = server.JOB_RUNNING
+MODEL_STOPPED = server.JOB_STOPPED
+MODEL_COMPLETED = server.JOB_COMPLETED
+# собственные состояния модели
+MODEL_NO_EXEC = 101
+
+# --------------------------------------------------------------------------
+# Данные о пользовательской модели
+# --------------------------------------------------------------------------
+
 class ModelData:
     def __init__(self, server, model, parent_data = None):
         # если мы создаем новый набор данных из описания модели
         if isinstance(model, task.DataDescription):
             self.mdef = task.DataDefinition(model, parent_data)
-            self.jid  = server.CreateJob() if model.IsExecutable() else None
+            self.jid = server.CreateJob() if model.IsExecutable() else None
         # если мы создаем набор данных из другого набора данных
         elif isinstance(model, ModelData):
             self.mdef = model.mdef.Copy()
-            self.jid  = server.CreateJob() if model.jid else None
+            self.jid = server.CreateJob() if model.jid else None
         else:
             self.mdef = None
-            self.jid  = None
+            self.jid = None
 
-        self.res  = None
+        assert self.mdef
+
+        self.res  = None            # результаты выполнения работы
+        if self.jid:
+            self.state = MODEL_READY    # состояние модели
+        else:
+            self.state = MODEL_NO_EXEC  # состояние модели
+
+# --------------------------------------------------------------------------
+# Данные о линии в графике
+# --------------------------------------------------------------------------
 
 LINE_CURVE     = 1
 LINE_MARKER    = 2
@@ -95,6 +117,10 @@ class LineData:
         data = container.GetPyData(item)
         assert data.res # если результата нет, то а-та-та
         return data.res.Zip(*self.columns)
+
+# --------------------------------------------------------------------------
+# Ошибки доступа к элементам в контейнерах
+# --------------------------------------------------------------------------
 
 class ItemError(Exception):
     pass
@@ -156,8 +182,11 @@ class MainFrame(forms.MainFrame):
             id = forms.ID_DUPLICATE_TREE)
         self.Bind(wx.EVT_MENU, self.OnDeleteModel,
             id = forms.ID_DELETE_MODEL)
+
         self.Bind(wx.EVT_MENU, self.OnModelProcess,
             id = forms.ID_PROCESS_MODEL)
+        self.Bind(wx.EVT_MENU, self.OnModelStop,
+            id = forms.ID_STOP_MODEL)
 
         self.Bind(wx.EVT_MENU, self.OnShowResult,
             id = forms.ID_SHOW_RESULT)
@@ -214,19 +243,6 @@ class MainFrame(forms.MainFrame):
         состояние окружения, выводит информацию, подгружает результаты
         выполнения работ и др.
         """
-
-        def StateToStr(state):
-            if   state == server.JOB_READY:
-                return 'Ready'
-            elif state == server.JOB_RUNNING:
-                return 'Running'
-            elif state == server.JOB_STOPPED:
-                return 'Stopped'
-            elif state == server.JOB_COMPLETED:
-                return 'Completed'
-            else:
-                return 'Unknown'
-
         try:
             um = self.m_user_models
             cycle_count = 0
@@ -247,25 +263,29 @@ class MainFrame(forms.MainFrame):
                         if not data:
                             continue
                         jid = data.jid
-                        if jid != None and self.server.IsJobChanged(jid):
+                        if jid and self.server.IsJobChanged(jid):
+                            # таким образом, тут мы обрабатываем новое состояние
+                            # работы (модели)
+
                             state, percent, comment = self.server.GetJobState(jid)
-                            um.SetItemText(item, StateToStr(state), 1)
+
+                            data.state = state
+                            self.SetModelState(item, data.state)
+
                             p = 'Unknown' if percent < 0 else '{:%}'.format(percent)
                             um.SetItemText(item, p, 2)
                             um.SetItemText(item, comment, 3)
+
                             print 'JID', jid, (state, percent, comment)
+
                             # завершающие действия по окончанию выполнения работы
                             if state == server.JOB_COMPLETED:
-                                # устанавливаем иконку для завершенной модели
-                                um.SetItemImage(item, self.icons.mcomplete)
                                 # получаем результаты выполнения
                                 data.res = self.server.GetJobResult(jid)
                                 # если завершившаяся задача в данный момент выделена
                                 # то сразу же показываем этот результат
                                 if um.IsSelected(item):
                                     self.ShowQuickResult(data.res)
-                            else:
-                                um.SetItemImage(item, self.icons.mrun)
                 finally:
                     wx.MutexGuiLeave()
                     pass
@@ -396,7 +416,6 @@ class MainFrame(forms.MainFrame):
         except Exception, e:
             print 'Oops', type(e), e
 
-
     def OnSaveProject(self, event):
 
         def WalkModels(item, dest):
@@ -407,7 +426,8 @@ class MainFrame(forms.MainFrame):
                 dest[title] = {
                     'model': mdef.DD.GetLabel(),
                     'data': mdef.params,
-                    'um': {}
+                    'um': {},
+                    'state': data.state,
                 }
                 if data.res:
                     dest[title]['result'] = data.res.DumpData()
@@ -457,9 +477,9 @@ class MainFrame(forms.MainFrame):
 
         # pprint(data)
         dump = json.dumps(data, indent = 2)
-        with open('data.opl', 'wb') as f:
-            f.write(zlib.compress(dump, 9))
-            # f.write(dump)
+        with open('data.opl', 'w') as f:
+            # f.write(zlib.compress(dump, 9))
+            f.write(dump)
 
         wx.EndBusyCursor()
 
@@ -495,6 +515,41 @@ class MainFrame(forms.MainFrame):
 
     # Добавление новых моделей
 
+    def SetModelState(self, item, state):
+        if state == MODEL_READY:
+            icon = self.icons.mready
+            text = 'Ready'
+
+        elif state == MODEL_RUNNING:
+            icon = self.icons.mrun
+            text = 'Running'
+
+        elif state == MODEL_COMPLETED:
+            icon = self.icons.mcomplete
+            text = 'Completed'
+
+        elif state == MODEL_STOPPED:
+            icon = self.icons.mstopped
+            text = 'Stopped'
+
+        else:
+            icon = self.icons.mnoexec
+            text = 'No executable'
+
+        self.m_user_models.SetItemImage(item, icon)
+        self.m_user_models.SetItemText(item, text, 1)
+
+    def AddModel(self, item, title, model_data):
+        """
+        Добавляет модель к указанной,
+        устанавливает имя, данные, состояние, иконку
+        """
+        um = self.m_user_models
+        item = um.AppendItem(item, title)
+        um.SetPyData(item, model_data)
+        self.SetModelState(item, model_data.state)
+        return item
+
     def AddModelToRoot(self, model):
         """
         Добавляет пользовательскую модель или спецификацию
@@ -514,13 +569,11 @@ class MainFrame(forms.MainFrame):
         root = None
         for i, m in enumerate(ms):
             name = self.GenerateName(m.GetTitle())
-            item = um.AppendItem(item, name)
-            um.SetItemImage(item, self.icons.mready)
             if not i:
                 root = item
             data = ModelData(self.server, m, defparent)
+            item = self.AddModel(item, name, data)
             defparent = data.mdef
-            um.SetPyData(item, data)
         if root:
             um.Expand(root)
         um.SelectItem(item)
@@ -543,10 +596,8 @@ class MainFrame(forms.MainFrame):
         # если новая модель может быть присоединена...
         if pmdef.DD == model.parent:
             name     = self.GenerateName(model.GetTitle())
-            child    = um.AppendItem(item, name)
             new_data = ModelData(self.server, model, pmdef)
-            um.SetPyData(child, new_data)
-            um.SetItemImage(child, self.icons.mready)
+            child = self.AddModel(item, name, new_data)
             um.SetFocus()
             um.Expand(item)
             um.SelectItem(child)
@@ -616,7 +667,11 @@ class MainFrame(forms.MainFrame):
     def OnParamChanged(self, event):
 
         def Walk(item):
-            um.SetItemImage(item, self.icons.mready)
+            data = um.GetPyData(item)
+            if data.state != MODEL_NO_EXEC:
+                data.state = MODEL_READY
+                self.SetModelState(item, data.state)
+
             child, _ = um.GetFirstChild(item)
             while child.IsOk():
                 Walk(child)
@@ -635,17 +690,7 @@ class MainFrame(forms.MainFrame):
         Walk(item)
 
     def OnTest(self, event):
-
-        def Walk(item):
-            print um.GetItemText(item)
-            um.SetItemImage(item, self.icons.mready)
-            child, cookie = um.GetFirstChild(item)
-            while child.IsOk():
-                Walk(child)
-                child = um.GetNextSibling(child)
-
-        um = self.m_user_models
-        Walk(um.GetRootItem())
+        pass
 
     # Получение данных выбранной модели
 
@@ -678,7 +723,7 @@ class MainFrame(forms.MainFrame):
         new_data = ModelData(self.server, data)
         um.SetItemText(item_dst, self.GenerateName(title))
         um.SetPyData(item_dst, new_data)
-        um.SetItemImage(item_dst, self.icons.mready)
+        self.SetModelState(item_dst, new_data.state)
 
     def OnDuplicate(self, event):
         """
@@ -731,7 +776,15 @@ class MainFrame(forms.MainFrame):
         um = self.m_user_models
         for i in um.GetSelections():
             data = um.GetItemPyData(i)
-            self.server.LaunchJob(data.jid, data.mdef)
+            if data.jid:
+                self.server.LaunchJob(data.jid, data.mdef)
+
+    def OnModelStop(self, event):
+        um = self.m_user_models
+        for i in um.GetSelections():
+            data = um.GetItemPyData(i)
+            if data.jid:
+                self.server.StopJob(data.jid)
 
     # Функции управления таблицами и отчетами
 
@@ -842,7 +895,8 @@ class MainFrame(forms.MainFrame):
     def ShowPlot(self, lines, plot_title = ''):
         if lines:
             p = PlotFrame(self, 'Plot', lines)
-            p.Show()
+            wx.FutureCall(20, p.Show)
+            # p.Show()
 
     def OnQuickShowPlot(self, event):
         lines = self.GetLines(LINE_CURVE)

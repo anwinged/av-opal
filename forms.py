@@ -18,7 +18,9 @@ ID_ADD_MODEL_SELECTED   = wx.NewId()
 ID_DUPLICATE_MODEL      = wx.NewId()
 ID_DUPLICATE_TREE       = wx.NewId()
 ID_DELETE_MODEL         = wx.NewId()
+
 ID_PROCESS_MODEL        = wx.NewId()
+ID_STOP_MODEL           = wx.NewId()
 
 ID_SHOW_RESULT          = wx.NewId()
 
@@ -152,6 +154,8 @@ class MainFrame(wx.Frame):
         icons.mready    = ilist.Add(wx.Bitmap('share/model-ready.png'))
         icons.mrun      = ilist.Add(wx.Bitmap('share/model-run.png'))
         icons.mcomplete = ilist.Add(wx.Bitmap('share/model-complete.png'))
+        icons.mstopped  = ilist.Add(wx.Bitmap('share/model-stop.png'))
+        icons.mnoexec   = ilist.Add(wx.Bitmap('share/model-no-exec.png'))
 
         icons.porg      = ilist.Add(wx.Bitmap('share/plot-org.png'))
         icons.pline     = ilist.Add(wx.Bitmap('share/plot-line.png'))
@@ -182,6 +186,7 @@ class MainFrame(wx.Frame):
 
         menu = wx.Menu()
         menu.Append(ID_PROCESS_MODEL, 'Process\tF5')
+        menu.Append(ID_STOP_MODEL, 'Stop\tF6')
         #menu.AppendSeparator()
         menubar.Append(menu, '&Run')
 
@@ -237,7 +242,9 @@ class MainFrame(wx.Frame):
             'Delete selected model')
         tb1.AddSeparator()
         tb1.AddSimpleTool(ID_PROCESS_MODEL, "model-go", wx.Bitmap('share/model-go.png'),
-            'Start process selected model')
+            'Start processing of selected models')
+        tb1.AddSimpleTool(ID_STOP_MODEL, "model-stop", wx.Bitmap('share/model-cancel.png'),
+            'Stop processing of selected models')
         tb1.AddSeparator()
         tb1.AddSimpleTool(ID_SHOW_PLOT, "plot-quick", wx.Bitmap('share/plot-line.png'),
             'Show quick plot for selected model')

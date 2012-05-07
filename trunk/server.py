@@ -219,16 +219,23 @@ class Worker(threading.Thread):
             proc.stdin.flush()
             # пока процесс не завершится (или его не прибьют)
             while proc.poll() == None:
+                # читаем и обрабатываем сообщение
                 msg = proc.stdout.readline()
                 self.ProcessMessage(job, msg)
+
+                # сервер был остановлен, завершаем выполнение всех работ
                 if not self.server.running:
                     proc.kill()
-                    raise KeyError
+                    
         except Exception, e:
+            # любая нестандартная исключительная ситуация
+            # приводит к немедленному завершанию работы
             WriteToLog('Job loop failed: ' + str(e))
             job.Finish(JOB_STOPPED)
         else:
-            job.Finish(JOB_COMPLETED, 1.0)
+            # только если работа уже не была остановлена
+            if job.state != JOB_STOPPED:
+                job.Finish(JOB_COMPLETED, 1.0)
 
     def ProcessMessage(self, job, msg):
         try:
@@ -246,7 +253,10 @@ class Worker(threading.Thread):
                 job.result = task.ResultData(data['result'])
             # произошла ошибка
             elif ans == 'error':
+                # произошла серьезная ошибка
+                # завршаем выполнение работы
                 WriteToLog('Error! ' + msg)
+                raise RuntimeError, msg
             # недокументированный ответ приложения
             else:
                 pass
@@ -318,7 +328,7 @@ class Job:
         if self.proc and self.proc.poll() == None:
             WriteToLog('Try to kill')
             self.proc.kill()
-            self.ChangeState()
+            self.Finish(JOB_STOPPED)
             WriteToLog('Job killed')
 
     def Finish(self, state, percent = None):

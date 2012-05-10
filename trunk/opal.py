@@ -220,7 +220,7 @@ class MainFrame(forms.MainFrame):
         ov.daemon = True
         ov.start()
 
-        self.NewProject(self.models[0])
+        #   self.NewProject(self.models[0])
 
     # Функции приложения и обработки сервера
 
@@ -372,27 +372,47 @@ class MainFrame(forms.MainFrame):
     def OnOpenProject(self, event):
 
         def WalkModels(source, root, models, model_def = None):
-            
-            for key, value in source.iteritems():
+            # for имя-модели, параметры-модели
+            for mname, value in source.iteritems():
                 label = value['model']
+
                 if label not in models:
                     raise KeyError, 'no "{}"'.format(label)
+
                 data = ModelData(self.server, models[label], model_def)
                 data.mdef.params = value['data']
+                data.state = value['state']
                 if 'result' in value:
                     data.res = task.ResultData(value['result'])
                 # тут надо проверить все добавленные параметры
 
-                item = um.AppendItem(root, key)
-                um.SetPyData(item, data)
-                model_items[key] = item
+                item = self.AddModel(root, mname, data)
+                model_items[mname] = item
+
                 WalkModels(value['um'], item, models[label].GetSpecs(), data)
+
+        def WalkPlots(source, root):
+            for plot in source:
+                item = self.m_plots.AppendItem(root, plot[0])
+                self.m_plots.SetPyData(item, 'plot')
+                self.m_plots.SetItemImage(item, self.icons.porg)
+                for line in plot[1]:
+                    model_label = line['model']
+                    data = LineData(
+                        ums_ptr = (um, model_items[model_label]),
+                        plots_ptr = None,
+                        type = line['type'],
+                        columns = (line['colx'], line['coly'])
+                    )
+                    self.AddLine(item, line['title'], data)
 
         try:        
             infile = 'data.opl'
             data = {}
-            with open(infile, 'rb') as f:
-                data = json.loads(zlib.decompress(f.read()))
+            # with open(infile, 'rb') as f:
+            #     data = json.loads(zlib.decompress(f.read()))
+            with open(infile, 'r') as f:
+                data = json.loads(f.read())
 
             pprint(data)
 
@@ -406,19 +426,29 @@ class MainFrame(forms.MainFrame):
 
             um = self.m_user_models
             model_items = {}
+
             root = um.GetRootItem()
             WalkModels(data['um'], root, {model.GetLabel(): model})
+            um.ExpandAll(root)
+
+            root = self.m_plots.GetRootItem()
+            WalkPlots(data['plots'], root)
+            self.m_plots.ExpandAll(root)
 
         # except KeyError, e:
         #     wx.MessageBox("Can't parse saved file!", 'Error!')
         # except ValueError, e:
         #     wx.MessageBox("Can't parse saved file!", 'Error!')
         except Exception, e:
+            # wx.MessageBox("Can't load file", 'Error')
             print 'Oops', type(e), e
 
     def OnSaveProject(self, event):
 
         def WalkModels(item, dest):
+            """
+            Сохраняем информацию о каждой модели
+            """
             if item != um.GetRootItem():
                 data = um.GetPyData(item)
                 title = um.GetItemText(item)
@@ -439,6 +469,9 @@ class MainFrame(forms.MainFrame):
                 child = um.GetNextSibling(child)
 
         def WalkPlots(root, dest):
+            """
+            Сохраняем информацию о каждом графике
+            """
             # по всеи элементам первого уровня
             item1, _ = self.m_plots.GetFirstChild(root)
             while item1.IsOk():
@@ -459,7 +492,6 @@ class MainFrame(forms.MainFrame):
                 title = self.m_plots.GetItemText(item1)
                 dest.append([title, lines])
                 item1 = self.m_plots.GetNextSibling(item1)
-
 
         wx.BeginBusyCursor()
 
@@ -860,8 +892,8 @@ class MainFrame(forms.MainFrame):
     @item_protector
     def AddLines(self, line_type):
         """
-        Добавляет линии в выделенный график компонента с графиками
-        (m_plots)
+        Добавляет линии в выделенный график
+        (компонента с графиками m_plots)
         """
         # получаем указатель на индекс и данные элемента, который выделен
         item, data = self.GetSelectedItemData(self.m_plots)
@@ -870,21 +902,19 @@ class MainFrame(forms.MainFrame):
             return
         # получаем указанные пользователем линии
         lines = self.GetLines(line_type)
-        # if not lines:
-        #     return
         for line in lines:
-            title = line.GetTitle()
-            child = self.m_plots.AppendItem(item, title)
-            # указываем на только что созданный новый элемент
-            line.plots_ptr = (self.m_plots, child)
-            # заполняем элемент данными
-            self.m_plots.SetPyData(child, line)
-            self.m_plots.SetItemImage(child, self.icons.pline)
-            self.m_plots.Expand(item)
-            if line.type == LINE_MARKER:
-                self.m_plots.SetItemImage(child, self.icons.pmarker)
-            else:
-                self.m_plots.SetItemImage(child, self.icons.pline)
+            self.AddLine(item, line.GetTitle(), line)
+
+    def AddLine(self, root, title, line_data):
+        item = self.m_plots.AppendItem(root, title)
+        self.m_plots.SetPyData(item, line_data)
+        line_data.plots_ptr = (self.m_plots, item)
+        if line_data.type == LINE_MARKER:
+            self.m_plots.SetItemImage(item, self.icons.pmarker)
+        else:
+            self.m_plots.SetItemImage(item, self.icons.pline)
+        self.m_plots.Expand(root)
+        return item
 
     def OnAddCurves(self, event):
         self.AddLines(LINE_CURVE)

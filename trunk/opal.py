@@ -406,42 +406,56 @@ class MainFrame(forms.MainFrame):
                     )
                     self.AddLine(item, line['title'], data)
 
-        try:        
-            infile = 'data.opl'
-            data = {}
-            # with open(infile, 'rb') as f:
-            #     data = json.loads(zlib.decompress(f.read()))
-            with open(infile, 'r') as f:
-                data = json.loads(f.read())
+        try:
+            wx.BeginBusyCursor()
+            self.do_nothing = True
 
-            pprint(data)
+            selector = wx.FileDialog(
+                self,
+                'Select file to load project',
+                '',
+                '',
+                'Opal files (*.opl)|*.opl|Text files (*.txt)|*.txt',
+                wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
 
-            tid = data['tid']
-            model_label = data['model']
-            model = self.server.CheckModel(tid, model_label) 
-            if not model:
-                raise ValueError
+            if selector.ShowModal() == wx.ID_OK:
 
-            self.NewProject(model, False)
+                filename = selector.GetPath()
+                data = {}
 
-            um = self.m_user_models
-            model_items = {}
+                if selector.GetFilterIndex() == 0:
+                    with open(filename, 'rb') as f:
+                        data = json.loads(zlib.decompress(f.read()))
+                else:
+                    with open(filename, 'r') as f:
+                        data = json.loads(f.read())
+                        
 
-            root = um.GetRootItem()
-            WalkModels(data['um'], root, {model.GetLabel(): model})
-            um.ExpandAll(root)
+                tid = data['tid']
+                model_label = data['model']
+                model = self.server.CheckModel(tid, model_label) 
+                if not model:
+                    raise ValueError
 
-            root = self.m_plots.GetRootItem()
-            WalkPlots(data['plots'], root)
-            self.m_plots.ExpandAll(root)
+                self.NewProject(model, False)
 
-        # except KeyError, e:
-        #     wx.MessageBox("Can't parse saved file!", 'Error!')
-        # except ValueError, e:
-        #     wx.MessageBox("Can't parse saved file!", 'Error!')
+                um = self.m_user_models
+                model_items = {}
+
+                root = um.GetRootItem()
+                WalkModels(data['um'], root, {model.GetLabel(): model})
+                um.ExpandAll(root)
+
+                root = self.m_plots.GetRootItem()
+                WalkPlots(data['plots'], root)
+                self.m_plots.ExpandAll()
+
         except Exception, e:
-            # wx.MessageBox("Can't load file", 'Error')
+            wx.MessageBox("Can't load saved file", 'Error', wx.ICON_ERROR | wx.OK)
             print 'Oops', type(e), e
+        finally:
+            wx.EndBusyCursor()
+            self.do_nothing = False
 
     def OnSaveProject(self, event):
 
@@ -493,27 +507,52 @@ class MainFrame(forms.MainFrame):
                 dest.append([title, lines])
                 item1 = self.m_plots.GetNextSibling(item1)
 
-        wx.BeginBusyCursor()
+        try:
+            wx.BeginBusyCursor()
+            self.do_nothing = True
 
-        data = {}
+            selector = wx.FileDialog(
+                self,
+                'Select file to save project',
+                '',
+                self.model.GetTitle() + ' project',
+                'Opal files (*.opl)|*.opl|Text files (*.txt)|*.txt',
+                wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
 
-        data['tid'] = self.model.GetTaskId()
-        data['model'] = self.model.GetLabel()
+            if selector.ShowModal() == wx.ID_OK:
 
-        um = self.m_user_models
-        data['um'] = {}
-        WalkModels(um.GetRootItem(), data['um'])
+                data = {}
 
-        data['plots'] = []
-        WalkPlots(self.m_plots.GetRootItem(), data['plots'])
+                data['tid'] = self.model.GetTaskId()
+                data['model'] = self.model.GetLabel()
 
-        # pprint(data)
-        dump = json.dumps(data, indent = 2)
-        with open('data.opl', 'w') as f:
-            # f.write(zlib.compress(dump, 9))
-            f.write(dump)
+                um = self.m_user_models
+                data['um'] = {}
+                WalkModels(um.GetRootItem(), data['um'])
 
-        wx.EndBusyCursor()
+                data['plots'] = []
+                WalkPlots(self.m_plots.GetRootItem(), data['plots'])
+
+                # pprint(data)
+                dump = json.dumps(data, indent = 2)
+
+                filename = selector.GetPath()
+                # сохраняем в упакованный бинарный формат
+                if selector.GetFilterIndex() == 0:
+                    with open(filename, 'wb') as f:
+                        f.write(zlib.compress(dump, 9))
+
+                # сохраняем в простой текстовый формат
+                else:
+                    with open(filename, 'w') as f:
+                        f.write(dump)
+                        
+        except Exception as e:
+            wx.MessageBox("Can't save the project", 'Error', wx.ICON_ERROR | wx.OK)
+            print e
+        finally:
+            wx.EndBusyCursor()
+            self.do_nothing = False
 
     # Функции непосредственной работы с моделями:
     # создание, изменение, дублирование и прочее

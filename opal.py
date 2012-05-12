@@ -27,6 +27,9 @@ import json
 import zlib
 from pprint import pprint
 
+import gettext
+_ = gettext.gettext
+
 # состояния модели, унаследованные от состояния задачи
 MODEL_READY = server.JOB_READY
 MODEL_RUNNING = server.JOB_RUNNING
@@ -133,10 +136,15 @@ class MainFrame(forms.MainFrame):
     def __init__(self):
         forms.MainFrame.__init__(self, None)
 
+        global _
+        _ = self.gettext
+
         self.model = None
         self.name_id = 1
 
-        s = server.LocalServer()
+        conf = self.settings['conf']
+        workers = int(self.settings['workers'])
+        s = server.LocalServer(conf=conf, workers=workers)
         s.LoadModels()
         self.models = s.GetModels()
         s.Start()
@@ -200,6 +208,11 @@ class MainFrame(forms.MainFrame):
         self.Bind(wx.EVT_MENU, self.OnAddMarkers,
             id = forms.ID_ADD_MARKERS)
 
+        self.Bind(wx.EVT_MENU, lambda x: self.ChangeLocale('en_EN'),
+            id = forms.ID_ENGLISH_LANG)
+        self.Bind(wx.EVT_MENU, lambda x: self.ChangeLocale('ru_RU'),
+            id = forms.ID_RUSSIAN_LANG)
+
         self.Bind(wx.EVT_MENU, self.OnAbout,
             id = forms.ID_ABOUT)
 
@@ -224,8 +237,13 @@ class MainFrame(forms.MainFrame):
 
     # Функции приложения и обработки сервера
 
+    def ChangeLocale(self, locale):
+        self.settings['locale'] = locale
+        wx.MessageBox(_('Locale changed. Restart application to apply settings'), _('Information'))
+
     def OnClose(self, event):
         self.server.Stop()
+        self.SaveSettings()
         self.Destroy()
 
     def OnAbout(self, event):
@@ -272,7 +290,7 @@ class MainFrame(forms.MainFrame):
                             data.state = state
                             self.SetModelState(item, data.state)
 
-                            p = 'Unknown' if percent < 0 else '{:%}'.format(percent)
+                            p = _('Unknown') if percent < 0 else '{:%}'.format(percent)
                             um.SetItemText(item, p, 2)
                             um.SetItemText(item, comment, 3)
 
@@ -355,7 +373,7 @@ class MainFrame(forms.MainFrame):
         # Создаем корневой элемент для окна с графиками
         self.m_plots.AddRoot('root')
 
-        self.SetStatusText('Model "{}" selected'.format(model.GetTitle()), 0)
+        self.SetStatusText(_('Model "{}" selected').format(model.GetTitle()), 0)
 
         return True # Project(model)
 
@@ -412,7 +430,7 @@ class MainFrame(forms.MainFrame):
 
             selector = wx.FileDialog(
                 self,
-                'Select file to load project',
+                _('Select file to load project'),
                 '',
                 '',
                 'Opal files (*.opl)|*.opl|Text files (*.txt)|*.txt',
@@ -451,7 +469,7 @@ class MainFrame(forms.MainFrame):
                 self.m_plots.ExpandAll()
 
         except Exception, e:
-            wx.MessageBox("Can't load saved file", 'Error', wx.ICON_ERROR | wx.OK)
+            wx.MessageBox(_("Can't load saved file"), _('Error'), wx.ICON_ERROR | wx.OK)
             print 'Oops', type(e), e
         finally:
             wx.EndBusyCursor()
@@ -513,7 +531,7 @@ class MainFrame(forms.MainFrame):
 
             selector = wx.FileDialog(
                 self,
-                'Select file to save project',
+                _('Select file to save project'),
                 '',
                 self.model.GetTitle() + ' project',
                 'Opal files (*.opl)|*.opl|Text files (*.txt)|*.txt',
@@ -548,7 +566,7 @@ class MainFrame(forms.MainFrame):
                         f.write(dump)
                         
         except Exception as e:
-            wx.MessageBox("Can't save the project", 'Error', wx.ICON_ERROR | wx.OK)
+            wx.MessageBox(_("Can't save the project"), _('Error'), wx.ICON_ERROR | wx.OK)
             print e
         finally:
             wx.EndBusyCursor()
@@ -589,23 +607,23 @@ class MainFrame(forms.MainFrame):
     def SetModelState(self, item, state):
         if state == MODEL_READY:
             icon = self.icons.mready
-            text = 'Ready'
+            text = _('Ready')
 
         elif state == MODEL_RUNNING:
             icon = self.icons.mrun
-            text = 'Running'
+            text = _('Running')
 
         elif state == MODEL_COMPLETED:
             icon = self.icons.mcomplete
-            text = 'Completed'
+            text = _('Completed')
 
         elif state == MODEL_STOPPED:
             icon = self.icons.mstopped
-            text = 'Stopped'
+            text = _('Stopped')
 
         else:
             icon = self.icons.mnoexec
-            text = 'No executable'
+            text = _('No executable')
 
         self.m_user_models.SetItemImage(item, icon)
         self.m_user_models.SetItemText(item, text, 1)
@@ -673,7 +691,7 @@ class MainFrame(forms.MainFrame):
             um.Expand(item)
             um.SelectItem(child)
         else:
-            wx.MessageBox('It\'s impossible to append model', 'Error')
+            wx.MessageBox(_("It's impossible to append model"), _('Error'))
 
     # Реакция на выбор модели
 
@@ -743,7 +761,7 @@ class MainFrame(forms.MainFrame):
                 data.state = MODEL_READY
                 self.SetModelState(item, data.state)
 
-            child, _ = um.GetFirstChild(item)
+            child, _null = um.GetFirstChild(item)
             while child.IsOk():
                 Walk(child)
                 child = um.GetNextSibling(child)
@@ -768,21 +786,21 @@ class MainFrame(forms.MainFrame):
     def GetSelectedItem(self, source):
         item = source.GetSelection()
         if not item.IsOk():
-            raise ItemError('Invalid item')
+            raise ItemError(_('Invalid item'))
         return item
 
     def GetSelectedData(self, source):
         item = self.GetSelectedItem(source)
         data = source.GetPyData(item)
         if not data:
-            raise ItemError('Empty data')
+            raise ItemError(_('Empty data'))
         return data
 
     def GetSelectedItemData(self, source):
         item = self.GetSelectedItem(source)
         data = source.GetPyData(item)
         if not data:
-            raise ItemError('Empty data')
+            raise ItemError(_('Empty data'))
         return (item, data)
 
     # Дублирование модели
@@ -862,7 +880,7 @@ class MainFrame(forms.MainFrame):
     def OnShowResult(self, event):
         item, data = self.GetSelectedItemData(self.m_user_models)
         title = self.m_user_models.GetItemText(item)
-        title = 'Result for model "{}"'.format(title)
+        title = _('Result for model "{}"').format(title)
         rframe = ResultFrame(self, title, data.res)
         rframe.Show()
 
@@ -870,7 +888,7 @@ class MainFrame(forms.MainFrame):
 
     def OnAddPlot(self, event):
         root = self.m_plots.GetRootItem()
-        child = self.m_plots.AppendItem(root, 'New plot')
+        child = self.m_plots.AppendItem(root, _('New plot'))
         self.m_plots.SetPyData(child, 'plot')
         self.m_plots.SetItemImage(child, self.icons.porg)
         self.m_plots.SelectItem(child)
@@ -916,11 +934,11 @@ class MainFrame(forms.MainFrame):
             data = um.GetPyData(item)
             title = um.GetItemText(item)
 
-            msg = 'Line(s) for "{}" ({}/{})'.format(title, index, count)
+            msg = _('Line(s) for "{}" ({}/{})').format(title, index, count)
 
             if not data.res:
                 wx.MessageBox(
-                    'There is no any result data for model!', 
+                    _('There is no any result data for model!'), 
                     msg, wx.OK | wx.ICON_EXCLAMATION)
             else:
                 f = CreateLineSelectDialog(self, msg, data)
@@ -963,7 +981,7 @@ class MainFrame(forms.MainFrame):
 
     def ShowPlot(self, lines, plot_title = ''):
         if lines:
-            p = PlotFrame(self, 'Plot', lines)
+            p = PlotFrame(self, _('Plot'), lines)
             wx.FutureCall(20, p.Show)
             # p.Show()
 
@@ -1076,7 +1094,8 @@ class ResultFrame(forms.ResultFrame):
         if not self.result or not self.result.table:
             return
 
-        text_file = wx.FileSelector('Save table to CSV',
+        text_file = wx.FileSelector(
+            _('Save table to CSV'),
             default_filename = 'table.csv',
             wildcard = 'PNG files (*.csv)|*.csv|Text files (*.txt)|*.txt',
             flags = wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
@@ -1177,7 +1196,8 @@ class PlotFrame(forms.PlotFrame):
         self.plot.Draw(graph)
 
     def OnSaveImage(self, event):
-        img_file = wx.FileSelector('Save plot',
+        img_file = wx.FileSelector(
+            _('Save plot'),
             default_filename = 'plot.png',
             default_extension = 'png',
             wildcard = 'PNG files (*.png)|*.png',

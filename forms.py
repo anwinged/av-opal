@@ -6,7 +6,12 @@ import wx.grid
 import wx.propgrid as wxpg
 import wx.lib.plot as wxplot
 import wx.lib.agw.aui as aui
+import gettext
+import json
+import os
 # import wx.aui as aui
+
+_ = gettext.gettext
 
 ID_NEW                  = wx.NewId()
 ID_SAVE                 = wx.NewId()
@@ -28,6 +33,9 @@ ID_SHOW_PLOT            = wx.NewId()
 ID_ADD_PLOT             = wx.NewId()
 ID_ADD_CURVES           = wx.NewId()
 ID_ADD_MARKERS          = wx.NewId()
+
+ID_ENGLISH_LANG         = wx.NewId()
+ID_RUSSIAN_LANG         = wx.NewId()
 
 ID_ABOUT                = wx.NewId()
 
@@ -75,6 +83,20 @@ class MainFrame(wx.Frame):
     def __init__(self, parent):
         wx.Frame.__init__ (self, parent, title = 'Opal', size = wx.Size(873,594))
 
+        self.settings = {}
+        self.LoadSettings()
+
+        lang = self.settings['locale']
+        if not lang:
+            locale = wx.Locale(wx.LANGUAGE_DEFAULT)
+            lang = locale.GetCanonicalName()
+            self.settings['locale'] = lang
+        Lang = gettext.translation('opal', './locale', languages=[lang], fallback=True)
+        Lang.install(unicode=True)
+        global _
+        _ = Lang.ugettext
+        self.gettext = Lang.ugettext
+
         self.auimgr = aui.AuiManager()
         self.auimgr.SetManagedWindow(self)
         self.auimgr.GetArtProvider().SetMetric(aui.AUI_DOCKART_SASH_SIZE, 3)
@@ -89,7 +111,7 @@ class MainFrame(wx.Frame):
         # self.m_specs.SetMinSize(wx.Size(200,-1))
 
         self.auimgr.AddPane(self.m_specs,
-            aui.AuiPaneInfo().Name("m_specs").Caption("Templates").
+            aui.AuiPaneInfo().Name("m_specs").Caption(_("Templates")).
             Left().Layer(1).CloseButton(False))
 
         # Пользовательские модели
@@ -97,15 +119,15 @@ class MainFrame(wx.Frame):
         self.m_user_models = TreeListCtrl(self, size = (200, -1),
             style = wx.TR_DEFAULT_STYLE | wx.TR_HIDE_ROOT
                     | wx.TR_FULL_ROW_HIGHLIGHT | wx.TR_ROW_LINES | wx.TR_MULTIPLE)
-        self.m_user_models.AddColumn("Model name")
-        self.m_user_models.AddColumn("Status")
-        self.m_user_models.AddColumn("Progress")
-        self.m_user_models.AddColumn("Comment")
+        self.m_user_models.AddColumn(_("Model name"))
+        self.m_user_models.AddColumn(_("Status"))
+        self.m_user_models.AddColumn(_("Progress"))
+        self.m_user_models.AddColumn(_("Comment"))
         self.m_user_models.SetMainColumn(0)
         self.m_user_models.SetImageList(self.ilist)
 
         self.auimgr.AddPane(self.m_user_models,
-            aui.AuiPaneInfo().Name("m_user_models").Caption("Models").
+            aui.AuiPaneInfo().Name("m_user_models").Caption(_("Models")).
             CenterPane().Position(1))
 
         # Параметры модели
@@ -113,7 +135,7 @@ class MainFrame(wx.Frame):
         self.m_params = PropertyCtrl(self, size = (-1, 300))
 
         self.auimgr.AddPane(self.m_params,
-            aui.AuiPaneInfo().Name("m_params").Caption("Parameters").CloseButton(False).
+            aui.AuiPaneInfo().Name("m_params").Caption(_("Parameters")).CloseButton(False).
             CenterPane().Bottom().Position(2))
 
         # Быстрые результаты
@@ -121,7 +143,7 @@ class MainFrame(wx.Frame):
         self.m_quick_result = PropertyCtrl(self, size = (200, -1))
 
         self.auimgr.AddPane(self.m_quick_result,
-            aui.AuiPaneInfo().Name("m_quick_result").Caption("Quick results").CloseButton(False).
+            aui.AuiPaneInfo().Name("m_quick_result").Caption(_("Quick results")).CloseButton(False).
             Right().Position(1).Layer(1))
 
         # Графики
@@ -131,7 +153,7 @@ class MainFrame(wx.Frame):
         self.m_plots.SetImageList(self.ilist)
 
         self.auimgr.AddPane(self.m_plots,
-            aui.AuiPaneInfo().Name("m_plots").Caption("Plots").CloseButton(False).
+            aui.AuiPaneInfo().Name("m_plots").Caption(_("Plots")).CloseButton(False).
             Right().Position(2).Layer(1))
 
         # Меню, панель инструментов и панель статуса
@@ -144,6 +166,11 @@ class MainFrame(wx.Frame):
         self.BuildContextMenu()
 
         self.BuildToolBar()
+
+        layout = self.settings['layout']
+        if layout:
+            self.auimgr.LoadPerspective(layout, False)
+            print 'layout loaded'
 
         self.auimgr.Update()
 
@@ -168,62 +195,74 @@ class MainFrame(wx.Frame):
         menubar = wx.MenuBar()
 
         menu = wx.Menu()
-        menu.Append(ID_NEW, "&New\tCtrl+N")
-        menu.Append(ID_OPEN, "&Open\tCtrl+O")
-        menu.Append(ID_SAVE, "&Save\tCtrl+S")
-        menubar.Append(menu, '&Project')
+        menu.Append(ID_NEW,  _("&New\tCtrl+N"))
+        menu.Append(ID_OPEN, _("&Open\tCtrl+O"))
+        menu.Append(ID_SAVE, _("&Save\tCtrl+S"))
+        menubar.Append(menu, _('&Project'))
 
         menu = wx.Menu()
-        menu.Append(ID_ADD_MODEL_ROOT, 'Add model to root')
-        menu.Append(ID_ADD_MODEL_SELECTED, 'Append model to selected')
+        menu.Append(ID_ADD_MODEL_ROOT, _('Add model to root'))
+        menu.Append(ID_ADD_MODEL_SELECTED, _('Append model to selected'))
         menu.AppendSeparator()
-        menu.Append(ID_DUPLICATE_MODEL, "&Duplicate\tCtrl+D")
-        menu.Append(ID_DUPLICATE_TREE, "&Duplicate with subitems\tCtrl+Shift+D")
-        menu.Append(ID_DELETE_MODEL, 'Delete\tCtrl+E')
+        menu.Append(ID_DUPLICATE_MODEL, _("&Duplicate\tCtrl+D"))
+        menu.Append(ID_DUPLICATE_TREE, _("&Duplicate with subitems\tCtrl+Shift+D"))
+        menu.Append(ID_DELETE_MODEL, _('Delete\tCtrl+E'))
         menu.AppendSeparator()
-        menu.Append(ID_TEST, "&Test\tCtrl+T")
-        menubar.Append(menu, '&Model')
+        menu.Append(ID_TEST, _("&Test\tCtrl+T"))
+        menubar.Append(menu, _('&Model'))
 
         menu = wx.Menu()
-        menu.Append(ID_PROCESS_MODEL, 'Process\tF5')
-        menu.Append(ID_STOP_MODEL, 'Stop\tF6')
+        menu.Append(ID_PROCESS_MODEL, _('Process\tF5'))
+        menu.Append(ID_STOP_MODEL, _('Stop\tF6'))
         #menu.AppendSeparator()
-        menubar.Append(menu, '&Run')
+        menubar.Append(menu, _('&Run'))
 
         menu = wx.Menu()
-        menu.Append(ID_SHOW_RESULT, 'Show report\tF7')
+        menu.Append(ID_SHOW_RESULT, _('Show report\tF7'))
         menu.AppendSeparator()
-        menu.Append(ID_SHOW_PLOT, 'Show plot\tF8')
-        menu.Append(ID_ADD_PLOT, 'Add plot')
-        #menu.Append(ID_ADD_LINE, 'Add line')
-        menubar.Append(menu, '&Result')
+        menu.Append(ID_SHOW_PLOT, _('Show plot\tF8'))
+        menu.Append(ID_ADD_PLOT, _('Add plot'))
+        #menu.Append(ID_ADD_LINE, _('Add line'))
+        menubar.Append(menu, _('&Result'))
 
         menu = wx.Menu()
-        menu.Append(ID_ABOUT, "&About\tF1")
-        menubar.Append(menu, '&Help')
+        submenu = wx.Menu()
+        submenu.Append(ID_ENGLISH_LANG, _('English'))
+        submenu.Append(ID_RUSSIAN_LANG, _('Russian'))
+        menu.AppendSubMenu(submenu, _('Language'))
+        menu.AppendSeparator()
+        # menu.Append(ID_SHOW_PLOT, _('Layout'))
+        # menu.Append(ID_ADD_PLOT, _('Options'))
+        #menu.Append(ID_ADD_LINE, _('Add line'))
+        menubar.Append(menu, _('&Settings'))
+
+
+        menu = wx.Menu()
+        menu.Append(ID_ABOUT, _("&About\tF1"))
+        menubar.Append(menu, _('&Help'))
 
         return menubar
 
     def BuildContextMenu(self):
         menu = wx.Menu()
-        menu.Append(ID_ADD_MODEL_ROOT, 'Add model to root')
-        menu.Append(ID_ADD_MODEL_SELECTED, 'Add model to selected')
+        menu.Append(ID_ADD_MODEL_ROOT, _('Add model to root'))
+        menu.Append(ID_ADD_MODEL_SELECTED, _('Add model to selected'))
         self.m_specs.Bind(wx.EVT_CONTEXT_MENU,
             lambda x: self.m_specs.PopupMenu(menu))
 
         menu1 = wx.Menu()
-        menu1.Append(ID_ADD_PLOT, 'Add plot')
+        menu1.Append(ID_ADD_PLOT, _('Add plot'))
         menu1.AppendSeparator()
-        menu1.Append(ID_ADD_CURVES,  'Add curves')
-        menu1.Append(ID_ADD_MARKERS, 'Add markers')
+        menu1.Append(ID_ADD_CURVES,  _('Add curves'))
+        menu1.Append(ID_ADD_MARKERS, _('Add markers'))
         self.m_plots.Bind(wx.EVT_CONTEXT_MENU,
             lambda x: self.m_plots.PopupMenu(menu1))
 
         menu2 = wx.Menu()
-        menu2.Append(ID_SHOW_RESULT,  'Show report')
+        menu2.Append(ID_SHOW_RESULT,  _('Show report'))
         menu2.AppendSeparator()
-        menu2.Append(ID_ADD_CURVES,  'Add curves')
-        menu2.Append(ID_ADD_MARKERS, 'Add markers')
+        menu2.Append(ID_ADD_CURVES,  _('Add curves'))
+        menu2.Append(ID_ADD_MARKERS, _('Add markers'))
         self.m_user_models.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK,
             lambda x: self.m_user_models.PopupMenu(menu2))
 
@@ -233,34 +272,52 @@ class MainFrame(wx.Frame):
         tb1.SetToolBitmapSize(wx.Size(16, 16))
 
         tb1.AddSimpleTool(ID_ADD_MODEL_SELECTED, "model-new", wx.Bitmap('share/model-add.png'),
-            'Add specification to selected model')
+            _('Add specification to selected model'))
         tb1.AddSimpleTool(ID_DUPLICATE_MODEL, "model-dup", wx.Bitmap('share/model-dup.png'),
-            'Duplicate selected model')
+            _('Duplicate selected model'))
         tb1.AddSimpleTool(ID_DUPLICATE_TREE, "model-dup-tree", wx.Bitmap('share/model-dup-tree.png'),
-            'Duplicate selected model and all submodels')
+            _('Duplicate selected model and all submodels'))
         tb1.AddSimpleTool(ID_DELETE_MODEL, "model-del", wx.Bitmap('share/model-delete.png'),
-            'Delete selected model')
+            _('Delete selected model'))
         tb1.AddSeparator()
         tb1.AddSimpleTool(ID_PROCESS_MODEL, "model-go", wx.Bitmap('share/model-go.png'),
-            'Start processing of selected models')
+            _('Start processing of selected models'))
         tb1.AddSimpleTool(ID_STOP_MODEL, "model-stop", wx.Bitmap('share/model-cancel.png'),
-            'Stop processing of selected models')
+            _('Stop processing of selected models'))
         tb1.AddSeparator()
         tb1.AddSimpleTool(ID_SHOW_PLOT, "plot-quick", wx.Bitmap('share/plot-line.png'),
-            'Show quick plot for selected model')
+            _('Show quick plot for selected model'))
         tb1.AddSimpleTool(ID_SHOW_RESULT, "report-show", wx.Bitmap('share/report-show.png'),
-            'Show result data and table for selected model')
+            _('Show result data and table for selected model'))
         tb1.AddSeparator()
         tb1.AddSimpleTool(ID_ABOUT, "app-about", wx.Bitmap('share/app-about.png'),
-            'Show infomation about application')    
+            _('Show infomation about application'))    
         tb1.Realize()
 
-        self.auimgr.AddPane(tb1, aui.AuiPaneInfo().Name("tb1").Caption("Toolbar").
+        self.auimgr.AddPane(tb1, aui.AuiPaneInfo().Name("tb1").Caption(_("Toolbar")).
                           ToolbarPane().Left().Floatable(False).Movable(False).Gripper(False))
+
+    def SaveSettings(self):
+        self.settings['layout'] = self.auimgr.SavePerspective()
+        with open('settings.conf', 'w') as f:
+            json.dump(self.settings, f, indent = 2)
+
+    def LoadSettings(self):
+        default = {
+            'workers': 2,
+            'conf': 'tasks.conf',
+            'locale': None,
+            'layout': None,
+        }
+
+        self.settings = default
+        if os.path.exists('settings.conf'):
+            with open('settings.conf', 'r') as f:
+                self.settings.update(json.load(f))
 
 class SelectModelDialog(wx.Dialog):
     def __init__(self, parent):
-        wx.Dialog.__init__(self, parent, -1, 'Select model')
+        wx.Dialog.__init__(self, parent, -1, _('Select model'))
 
         sizer = wx.BoxSizer(wx.VERTICAL)
         self.mlist = wx.ListCtrl(self, style = wx.LC_ICON | wx.LC_SINGLE_SEL)
@@ -301,9 +358,9 @@ class ResultFrame(wx.Frame):
         menubar = wx.MenuBar()
 
         menu = wx.Menu()
-        menu.Append(ID_EXPORT_CSV, 'CSV\tCtrl+E')
+        menu.Append(ID_EXPORT_CSV, _('CSV\tCtrl+E'))
         #menu.Append(wx.NewId(), 'TeX')
-        menubar.Append(menu, 'Export to')
+        menubar.Append(menu, _('Export to'))
 
         return menubar
 
@@ -331,7 +388,7 @@ class LineSelectDialog(wx.Dialog):
 
 class SizeSelector(wx.Dialog):
     def __init__(self, parent):
-        wx.Dialog.__init__(self, parent, -1, 'Image size', size = (200, 100))
+        wx.Dialog.__init__(self, parent, -1, _('Image size'), size = (200, 100))
 
         bSizer = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -387,8 +444,8 @@ class PlotFrame(wx.Frame):
 
         menubar = wx.MenuBar()
         menu = wx.Menu()
-        menu.Append(ID_SAVE_PLOT, 'Save to file\tCtrl+S')
-        menubar.Append(menu, 'Plot')
+        menu.Append(ID_SAVE_PLOT, _('Save to file\tCtrl+S'))
+        menubar.Append(menu, _('Plot'))
         self.SetMenuBar(menubar)
 
         self.plot.canvas.Bind(wx.EVT_MOUSEWHEEL, self.OnZoom)  
@@ -419,7 +476,7 @@ class PlotFrame(wx.Frame):
 
 class AboutDialog(wx.Dialog):
     def __init__(self, parent):
-        wx.Dialog.__init__(self, parent, title = 'About Opal', size = (300, 330))
+        wx.Dialog.__init__(self, parent, title = _('About Opal'), size = (300, 330))
 
         title   = 'Opal System'
         version = 'Aurora version'

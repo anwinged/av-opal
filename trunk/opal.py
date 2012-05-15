@@ -137,7 +137,7 @@ class MainFrame(forms.MainFrame):
         forms.MainFrame.__init__(self, None)
 
         global _
-        _ = self.gettext
+        _ = self.lang.ugettext
 
         self.model = None
         self.name_id = 1
@@ -240,6 +240,9 @@ class MainFrame(forms.MainFrame):
     def ChangeLocale(self, locale):
         self.settings['locale'] = locale
         wx.MessageBox(_('Locale changed. Restart application to apply settings'), _('Information'))
+        self.lang = gettext.translation('opal', './locale', languages=[locale], fallback=True)
+        self.lang.install(unicode=True)
+
 
     def OnClose(self, event):
         self.server.Stop()
@@ -384,6 +387,8 @@ class MainFrame(forms.MainFrame):
             model = f.GetSelectedModel()
             if model:
                 self.NewProject(model)
+            else:
+                print 'Empty model'
 
         self.do_nothing = False
 
@@ -1030,17 +1035,17 @@ class SelectModelDialog(forms.SelectModelDialog):
         self.mlist.SetImageList(self.ilist, wx.IMAGE_LIST_NORMAL)
         self.data_list = {}
 
-        for model in models:
+        for index, model in enumerate(models):
             item = wx.ListItem()
+            item.SetId(index)
             item.SetText(model.GetTitle())
-            #item.Data = model
+            self.data_list[index] = model
             img_data = model.GetImage()
             if img_data:
                 img = PyEmbeddedImage(img_data)
                 index = self.ilist.Add(img.GetBitmap())
                 item.SetImage(index)
-            index = self.mlist.InsertItem(item)
-            self.data_list[index] = model
+            self.mlist.InsertItem(item)
 
     def GetSelectedModel(self):
         index = self.mlist.GetNextItem(-1, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)

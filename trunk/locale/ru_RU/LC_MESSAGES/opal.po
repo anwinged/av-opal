@@ -1,0 +1,334 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Opal Aurora\n"
+"POT-Creation-Date: 2012-05-12 13:57+0400\n"
+"PO-Revision-Date: 2012-05-12 13:58+0400\n"
+"Last-Translator: anwinged <anwinged@ya.ru>\n"
+"Language-Team: Anton \"anwinged\" Vakhrushev <anwinged@ya.ru>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Poedit-KeywordsList: _;gettext;gettext_noop\n"
+"X-Poedit-Basepath: C:\\Projects\n"
+"X-Poedit-Language: Russian\n"
+"X-Poedit-SourceCharset: utf-8\n"
+"X-Poedit-SearchPath-0: Opal\n"
+
+#: Opal/forms.py:114
+msgid "Templates"
+msgstr "Шаблоны"
+
+#: Opal/forms.py:122
+msgid "Model name"
+msgstr "Имя модели"
+
+#: Opal/forms.py:123
+msgid "Status"
+msgstr "Статус"
+
+#: Opal/forms.py:124
+msgid "Progress"
+msgstr "Прогресс"
+
+#: Opal/forms.py:125
+msgid "Comment"
+msgstr "Комментарий"
+
+#: Opal/forms.py:130
+msgid "Models"
+msgstr "Модели"
+
+#: Opal/forms.py:138
+msgid "Parameters"
+msgstr "Параметры"
+
+#: Opal/forms.py:146
+msgid "Quick results"
+msgstr "Быстрый просмотр"
+
+#: Opal/forms.py:156
+msgid "Plots"
+msgstr "Графики"
+
+#: Opal/forms.py:198
+msgid "&New\tCtrl+N"
+msgstr "&Новый\tCtrl+N"
+
+#: Opal/forms.py:199
+msgid "&Open\tCtrl+O"
+msgstr "&Открыть\tCtrl+O"
+
+#: Opal/forms.py:200
+msgid "&Save\tCtrl+S"
+msgstr "&Сохранить\tCtrl+S"
+
+#: Opal/forms.py:201
+msgid "&Project"
+msgstr "&Проект"
+
+#: Opal/forms.py:204
+#: Opal/forms.py:248
+msgid "Add model to root"
+msgstr "Добавить модель в корень"
+
+#: Opal/forms.py:205
+msgid "Append model to selected"
+msgstr "Добавить модель к выбранной"
+
+#: Opal/forms.py:207
+msgid "&Duplicate\tCtrl+D"
+msgstr "&Дублировать\tCtrl+D"
+
+#: Opal/forms.py:208
+msgid "&Duplicate with subitems\tCtrl+Shift+D"
+msgstr "&Дублировать с поддеревом\tCtrl+Shift+D"
+
+#: Opal/forms.py:209
+msgid "Delete\tCtrl+E"
+msgstr "Удалить\tCtrl+E"
+
+#: Opal/forms.py:211
+msgid "&Test\tCtrl+T"
+msgstr ""
+
+#: Opal/forms.py:212
+msgid "&Model"
+msgstr "&Модель"
+
+#: Opal/forms.py:215
+msgid "Process\tF5"
+msgstr "Запустить\tF5"
+
+#: Opal/forms.py:216
+msgid "Stop\tF6"
+msgstr "Остановить\tF6"
+
+#: Opal/forms.py:218
+msgid "&Run"
+msgstr "&Выполнить"
+
+#: Opal/forms.py:221
+msgid "Show report\tF7"
+msgstr "Показать отчет\tF7"
+
+#: Opal/forms.py:223
+msgid "Show plot\tF8"
+msgstr "Показать график\tF8"
+
+#: Opal/forms.py:224
+#: Opal/forms.py:254
+msgid "Add plot"
+msgstr "Добавить график"
+
+#: Opal/forms.py:226
+msgid "&Result"
+msgstr "&Результат"
+
+#: Opal/forms.py:230
+msgid "English"
+msgstr "Английский"
+
+#: Opal/forms.py:231
+msgid "Russian"
+msgstr "Русский"
+
+#: Opal/forms.py:232
+msgid "Language"
+msgstr "Язык"
+
+#: Opal/forms.py:237
+msgid "&Settings"
+msgstr "Настройки"
+
+#: Opal/forms.py:241
+msgid "&About\tF1"
+msgstr "&О программе\tF1"
+
+#: Opal/forms.py:242
+msgid "&Help"
+msgstr "&Помощь"
+
+#: Opal/forms.py:249
+msgid "Add model to selected"
+msgstr "Добавить модель к выбранной"
+
+#: Opal/forms.py:256
+#: Opal/forms.py:264
+msgid "Add curves"
+msgstr "Добавить линии"
+
+#: Opal/forms.py:257
+#: Opal/forms.py:265
+msgid "Add markers"
+msgstr "Добавить маркеры"
+
+#: Opal/forms.py:262
+msgid "Show report"
+msgstr "Показать отчет"
+
+#: Opal/forms.py:275
+msgid "Add specification to selected model"
+msgstr "Добавить спецификацию к выбранной модели"
+
+#: Opal/forms.py:277
+msgid "Duplicate selected model"
+msgstr "Дублировать выделенную модель"
+
+#: Opal/forms.py:279
+msgid "Duplicate selected model and all submodels"
+msgstr "Дублировать выбранную модель со всеми спецификациями"
+
+#: Opal/forms.py:281
+msgid "Delete selected model"
+msgstr "Удалить выбранную модель"
+
+#: Opal/forms.py:284
+msgid "Start processing of selected models"
+msgstr "Начать обработку выбранных моделей"
+
+#: Opal/forms.py:286
+msgid "Stop processing of selected models"
+msgstr "Остановить обработку выбранных моделей"
+
+#: Opal/forms.py:289
+msgid "Show quick plot for selected model"
+msgstr "Построить график для выбранных моделей"
+
+#: Opal/forms.py:291
+msgid "Show result data and table for selected model"
+msgstr "Покаразть результаты вычислений для выбранной модели"
+
+#: Opal/forms.py:294
+msgid "Show infomation about application"
+msgstr "Показать информацию о приложении"
+
+#: Opal/forms.py:297
+msgid "Toolbar"
+msgstr ""
+
+#: Opal/forms.py:320
+msgid "Select model"
+msgstr "Выбрать модель"
+
+#: Opal/forms.py:361
+msgid "CSV\tCtrl+E"
+msgstr "CSV\tCtrl+E"
+
+#: Opal/forms.py:363
+msgid "Export to"
+msgstr "Экспортировать как"
+
+#: Opal/forms.py:391
+msgid "Image size"
+msgstr "Размер изображения"
+
+#: Opal/forms.py:447
+msgid "Save to file\tCtrl+S"
+msgstr "Сохранить\tCtrl+S"
+
+#: Opal/forms.py:448
+#: Opal/opal.py:984
+msgid "Plot"
+msgstr "График"
+
+#: Opal/forms.py:479
+msgid "About Opal"
+msgstr "О программе Opal"
+
+#: Opal/opal.py:242
+msgid "Information"
+msgstr "Информация"
+
+#: Opal/opal.py:242
+msgid "Locale changed. Restart application to apply settings"
+msgstr "Локаль изменена. Перезапустите приложение, чтобы настройки вступили в силу"
+
+#: Opal/opal.py:293
+msgid "Unknown"
+msgstr "Неизвестно"
+
+#: Opal/opal.py:376
+msgid "Model \"{}\" selected"
+msgstr "Модель \"{}\" выбрана"
+
+#: Opal/opal.py:433
+msgid "Select file to load project"
+msgstr "Выбрать файл с проектом"
+
+#: Opal/opal.py:472
+msgid "Can't load saved file"
+msgstr "Невозможно загрузить сохраненный файл"
+
+#: Opal/opal.py:472
+#: Opal/opal.py:569
+#: Opal/opal.py:694
+msgid "Error"
+msgstr "Ошибка"
+
+#: Opal/opal.py:534
+msgid "Select file to save project"
+msgstr "Выбрать файл для проекта"
+
+#: Opal/opal.py:569
+msgid "Can't save the project"
+msgstr "Невозможно сохранить прокт"
+
+#: Opal/opal.py:610
+msgid "Ready"
+msgstr "Ожидает"
+
+#: Opal/opal.py:614
+msgid "Running"
+msgstr "Выполняется"
+
+#: Opal/opal.py:618
+msgid "Completed"
+msgstr "Завершено"
+
+#: Opal/opal.py:622
+msgid "Stopped"
+msgstr "Остановлено"
+
+#: Opal/opal.py:626
+msgid "No executable"
+msgstr "Не выполнимая"
+
+#: Opal/opal.py:694
+msgid "It's impossible to append model"
+msgstr "Невозможно добавить модель"
+
+#: Opal/opal.py:789
+msgid "Invalid item"
+msgstr "Неверный элемент"
+
+#: Opal/opal.py:796
+#: Opal/opal.py:803
+msgid "Empty data"
+msgstr "Нет данных"
+
+#: Opal/opal.py:883
+msgid "Result for model \"{}\""
+msgstr "Результат для моделиl \"{}\""
+
+#: Opal/opal.py:891
+msgid "New plot"
+msgstr "Новый график"
+
+#: Opal/opal.py:937
+msgid "Line(s) for \"{}\" ({}/{})"
+msgstr "Линии для \"{}\" ({}/{})"
+
+#: Opal/opal.py:941
+msgid "There is no any result data for model!"
+msgstr "Для модели нет результата!"
+
+#: Opal/opal.py:1098
+msgid "Save table to CSV"
+msgstr "Сохранить таблицу как CSV"
+
+#: Opal/opal.py:1200
+msgid "Save plot"
+msgstr "Сохранить график"
+
+#~ msgid "Locale"
+#~ msgstr "Язык"

@@ -95,7 +95,7 @@ class MainFrame(wx.Frame):
         Lang.install(unicode=True)
         global _
         _ = Lang.ugettext
-        self.gettext = Lang.ugettext
+        self.lang = Lang
 
         self.auimgr = aui.AuiManager()
         self.auimgr.SetManagedWindow(self)
@@ -111,8 +111,7 @@ class MainFrame(wx.Frame):
         # self.m_specs.SetMinSize(wx.Size(200,-1))
 
         self.auimgr.AddPane(self.m_specs,
-            aui.AuiPaneInfo().Name("m_specs").Caption(_("Templates")).
-            Left().Layer(1).CloseButton(False))
+            aui.AuiPaneInfo().Name("m_specs").Left().Layer(1).CloseButton(False))
 
         # Пользовательские модели
 
@@ -127,15 +126,14 @@ class MainFrame(wx.Frame):
         self.m_user_models.SetImageList(self.ilist)
 
         self.auimgr.AddPane(self.m_user_models,
-            aui.AuiPaneInfo().Name("m_user_models").Caption(_("Models")).
-            CenterPane().Position(1))
+            aui.AuiPaneInfo().Name("m_user_models").CenterPane().Position(1))
 
         # Параметры модели
 
         self.m_params = PropertyCtrl(self, size = (-1, 300))
 
         self.auimgr.AddPane(self.m_params,
-            aui.AuiPaneInfo().Name("m_params").Caption(_("Parameters")).CloseButton(False).
+            aui.AuiPaneInfo().Name("m_params").CloseButton(False).
             CenterPane().Bottom().Position(2))
 
         # Быстрые результаты
@@ -143,7 +141,7 @@ class MainFrame(wx.Frame):
         self.m_quick_result = PropertyCtrl(self, size = (200, -1))
 
         self.auimgr.AddPane(self.m_quick_result,
-            aui.AuiPaneInfo().Name("m_quick_result").Caption(_("Quick results")).CloseButton(False).
+            aui.AuiPaneInfo().Name("m_quick_result").CloseButton(False).
             Right().Position(1).Layer(1))
 
         # Графики
@@ -153,7 +151,7 @@ class MainFrame(wx.Frame):
         self.m_plots.SetImageList(self.ilist)
 
         self.auimgr.AddPane(self.m_plots,
-            aui.AuiPaneInfo().Name("m_plots").Caption(_("Plots")).CloseButton(False).
+            aui.AuiPaneInfo().Name("m_plots").CloseButton(False).
             Right().Position(2).Layer(1))
 
         # Меню, панель инструментов и панель статуса
@@ -170,7 +168,13 @@ class MainFrame(wx.Frame):
         layout = self.settings['layout']
         if layout:
             self.auimgr.LoadPerspective(layout, False)
-            print 'layout loaded'
+            # print 'layout loaded'
+
+        self.auimgr.GetPane('m_specs').Caption(_("Templates"))
+        self.auimgr.GetPane('m_user_models').Caption(_("Models"))
+        self.auimgr.GetPane("m_params").Caption(_("Parameters"))
+        self.auimgr.GetPane("m_quick_result").Caption(_("Quick results"))
+        self.auimgr.GetPane("m_plots").Caption(_("Plots"))
 
         self.auimgr.Update()
 
@@ -230,7 +234,6 @@ class MainFrame(wx.Frame):
         submenu.Append(ID_ENGLISH_LANG, _('English'))
         submenu.Append(ID_RUSSIAN_LANG, _('Russian'))
         menu.AppendSubMenu(submenu, _('Language'))
-        menu.AppendSeparator()
         # menu.Append(ID_SHOW_PLOT, _('Layout'))
         # menu.Append(ID_ADD_PLOT, _('Options'))
         #menu.Append(ID_ADD_LINE, _('Add line'))

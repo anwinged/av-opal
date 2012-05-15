@@ -73,6 +73,9 @@ class LocalServer:
         for line in open(self.conf, 'r'):
             try:
                 # нормализуем указанный путь
+                line = line.strip()
+                if not line:
+                    continue
                 line = os.path.normpath(line)
                 line = os.path.abspath(line)
                 # считываем данные через shell (важно для скриптовых языков)

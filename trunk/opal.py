@@ -732,6 +732,7 @@ class MainFrame(forms.MainFrame):
             pid     = pg.Append(prop(title, value = value))
             pg.SetPropertyClientData(pid, label)
             pg.SetPropertyHelpString(pid, param.GetComment())
+        pg.Sort()
 
     def ShowQuickResult(self, result):
         if not result:
